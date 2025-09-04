@@ -461,12 +461,6 @@ jobs:
           echo "CONFIG_TCP_CONG_WESTWOOD=n" >> ./common/arch/arm64/configs/gki_defconfig
           echo "CONFIG_TCP_CONG_HTCP=n" >> ./common/arch/arm64/configs/gki_defconfig
           echo "CONFIG_DEBUG_INFO=y" >> ./common/arch/arm64/configs/gki_defconfig
-echo "CONFIG_PANIC_ON_OOPS=y" >> ./common/arch/arm64/configs/gki_defconfig
-echo "CONFIG_EARLY_PRINTK=y" >> ./common/arch/arm64/configs/gki_defconfig
-echo "CONFIG_PSTORE=y" >> ./common/arch/arm64/configs/gki_defconfig
-echo "CONFIG_RAMOOPS=y" >> ./common/arch/arm64/configs/gki_defconfig
-echo "CONFIG_PSTORE_CONSOLE=y" >> ./common/arch/arm64/configs/gki_defconfig
-echo "CONFIG_PSTORE_PMSG=y" >> ./common/arch/arm64/configs/gki_defconfig
 
           # Add SUSFS configuration settings
           echo "CONFIG_KSU_SUSFS=y" >> ./common/arch/arm64/configs/gki_defconfig
