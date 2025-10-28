@@ -50,8 +50,13 @@ on:
         required: true
         type: boolean
         default: true
-jobs:
+      BBG:
+        description: '是否启用内核层面阻止对关键分区/设备节点的非法写入(LSM)?'
+        required: true
+        type: boolean
+        default: false
 
+jobs:
   build-kernel-a13-5-15:
     uses: ./.github/workflows/kernel-a13-5.15.yml
     secrets: inherit
@@ -62,10 +67,10 @@ jobs:
       version: ${{ inputs.version }}
       use_zram: ${{ inputs.use_zram }}
       use_kpm: ${{ inputs.use_kpm }}
+      BBG: ${{ inputs.BBG }}
   get-ksu-manager:
     if: ${{ inputs.get_manager }}
     uses: ./.github/workflows/get-manager.yml
     secrets: inherit
     with:
       kernelsu_variant: ${{ inputs.kernelsu_variant }}
-
