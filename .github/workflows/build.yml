@@ -504,8 +504,8 @@ jobs:
               curl -LSs "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/main/kernel/setup.sh" | bash $BRANCH
               ;;
             "ReSukiSU")
-              echo "添加 ReSukiSU..."
-              curl -LSs "https://raw.githubusercontent.com/ReSukiSU/ReSukiSU/main/kernel/setup.sh" | bash $BRANCH
+              echo "添加 ReSukiSU (sync-susfs 分支)..."
+              curl -LSs "https://raw.githubusercontent.com/ReSukiSU/ReSukiSU/sync-susfs/kernel/setup.sh" | bash -s sync-susfs
               ;;
           esac
 
