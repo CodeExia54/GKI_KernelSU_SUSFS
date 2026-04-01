@@ -13,14 +13,10 @@ on:
     inputs:
       # KernelSU 变体固定为 ReSukiSU
       kernelsu_branch:
-        description: "KSU 分支"
-        required: true
-        type: choice
-        options:
-          - Stable(标准)
-          - Dev(开发)
-          - Other(其他/指定)
-        default: Stable(标准)
+        description: "KSU 分支 (main/builtin/自定义commit hash，留空使用默认)"
+        required: false
+        type: string
+        default: ""
       version:
         description: "自定义版本名 (可选)"
         required: false
@@ -34,17 +30,17 @@ on:
         description: "启用 ZRAM 增强算法"
         required: true
         type: boolean
-        default: true
+        default: false
       use_bbg:
         description: "启用 BBG 防格机"
         required: true
         type: boolean
-        default: true
+        default: false
       use_kpm:
         description: "启用 KPM 功能"
         required: true
         type: boolean
-        default: true
+        default: false
       cancel_susfs:
         description: "禁用 SUSFS"
         required: true

@@ -14,7 +14,7 @@
 
 </div>
 
-## ⚠️ 仓库须知 ⚠️
+## ⚠️ 仓库须知
 
 ① 本仓库分叉自 [zzh20188/GKI_KernelSU_SUSFS](https://github.com/zzh20188/GKI_KernelSU_SUSFS/) 本人只进行了部分修改与问题修复，请各位使用者优先考虑分叉原始仓库。
 
@@ -22,13 +22,19 @@
 
 ## 💰 特别鸣谢
 
-[coolzyd9107](https://github.com/coolzyd9107)：仓库的创建者和所有者，但他是一个大fèiwù，很多东西都不会
+[coolzyd9107](https://github.com/coolzyd9107)：仓库的创建者和所有者，但他是一个大fèiwù，很多东西都不会。
 
-[zzh20188](https://github.com/zzh20188)：他是本仓库的上游仓库作者
+[zzh20188](https://github.com/zzh20188)：他是本仓库的上游仓库作者。
 
-[zhuzhuzihan](https://github.com/zhuzhuzihan)：协助进行了大量修复和修改
+[zhuzhuzihan](https://github.com/zhuzhuzihan)：协助进行了大量修复和修改，同时为我们的Telegram Bot提供服务器(仓库所有者真的太穷了，租不起)，我们的Telegram Bot的主要开发者。
 
-[TanakaLun](https://github.com/TanakaLun)：协助进行了大量修复和修改
+[TanakaLun](https://github.com/TanakaLun)：协助进行了大量修复和修改。
+
+[YC酱luyancib](https://github.com/luyanci): 协助开发Telegram Bot，提供部分构建工作流程修复思路和Bot开发思路。
+
+[AlexLiuDev233](https://github.com/AlexLiuDev233): 协助修复构建工作流程存在的问题。
+
+[cctv18](https://github.com/cctv18): 协助修复构建工作流程存在的问题，为添加6.12内核构建支持提供部分思路，为修复一些SUSFS导致的问题提供思路。
 
 ## 🚀 快速导航
 
@@ -51,7 +57,8 @@
 > **默认变体已切换为 ReSukiSU**
 
 > **Android 16：已支持 Android 16 - 6.12 内核版本**
-
+>
+> **自本仓库的提交#c17aae5起我们已彻底移除对除ReSukiSU以外的KernelSU变体的内核构建支持，如果你出于某种原因更喜欢使用其他KernelSU变体的管理器，你完全不必担心，我们启用了muti-manager (内核中的KernelSU驱动程序仍是ReSukiSU，但支持使用其它大部分KernelSU变体的管理器进行管理，例如KowSU和SukiSU-Ultra的管理器) ，这样你就可以直接使用其他KernelSU变体的管理器，但请务必记住，如果你要反馈问题，请使用ReSukiSU管理器提交日志信息**
 
 ---
 

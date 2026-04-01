@@ -128,7 +128,7 @@ jobs:
 
       # ==================== 检出仓库代码 ====================
       - name: 检出代码仓库
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       # ==================== 初始化构建环境 ====================
       # 设置各种路径变量，包括内核源码、补丁、工具等目录
@@ -240,7 +240,7 @@ jobs:
           SUSFS_BRANCH="gki-${{ inputs.android_version }}-${{ inputs.kernel_version }}"
 
           echo "克隆 AnyKernel3..."
-          git clone https://github.com/WildKernels/AnyKernel3.git -b "$ANYKERNEL_BRANCH"
+          git clone https://github.com/coolzyd9107/AnyKernel3.git -b "master"
           rm -rf AnyKernel3/.git
 
           echo "克隆 SUSFS (分支: $SUSFS_BRANCH)..."
@@ -394,23 +394,20 @@ jobs:
           echo "obj-y += hmbird_patch.o" >> Makefile
 
       # ==================== 确定 KernelSU 分支 ====================
-      # ReSukiSU 固定使用 main 分支
+      # ReSukiSU 支持自定义分支或 commit hash
       - name: 确定 KernelSU 分支
         id: ksu-branch
         run: |
           branch_input="${{ inputs.ksu_branch }}"
 
-          case "$branch_input" in
-            "Stable(标准)")
-              BRANCH="-s main"
-              ;;
-            "Dev(开发)")
-              BRANCH="-s main"
-              ;;
-            *)
-              BRANCH="-s main"
-              ;;
-          esac
+          # 如果用户输入了自定义分支名或 commit hash，直接使用
+          if [ -n "$branch_input" ]; then
+            BRANCH="-s $branch_input"
+            echo "使用自定义分支/提交: $branch_input"
+          else
+            # ReSukiSU 默认使用 main 分支
+            BRANCH="-s main"
+          fi
 
           echo "BRANCH=$BRANCH" >> $GITHUB_ENV
           echo "KSU 分支: $BRANCH"
@@ -516,7 +513,7 @@ jobs:
 
             # Android 14 - 6.1 修复
             if [[ "${{ inputs.android_version }}" == "android14" && "${{ inputs.kernel_version }}" == "6.1" ]]; then
-              if [[ "$CURRENT_SUB" -le 138 || "$CURRENT_SUB" -ge 145 ]]; then
+              if [[ "$CURRENT_SUB" -le 141 || "$CURRENT_SUB" -ge 145 ]]; then
                 cp $KERNEL_PATCHES/wild/susfs_fix_patches/v${SUSFS_VERSION}/a14-6.1/base.c.patch ./
                 patch -p1 < base.c.patch || true
               fi
@@ -528,6 +525,15 @@ jobs:
               fi
               if [[ "$CURRENT_SUB" -le 75 && "${{ inputs.os_patch_level }}" != "2024-05" ]]; then
                 sed -i -e 's/goto show_pad;/return 0;/' ./fs/proc/task_mmu.c
+              fi
+              # 修复 6.1 LTS: SUSFS 补丁在 namespace.c 头部 hunk 因上下文不匹配而失败，
+              # 导致函数体中的 SUSFS 符号（DEFAULT_KSU_MNT_ID 等）未声明
+              if grep -q 'DEFAULT_KSU_MNT_ID\|susfs_mnt_id_ida' ./fs/namespace.c && ! grep -qF '#include <linux/susfs_def.h>' ./fs/namespace.c; then
+                echo "检测到 namespace.c 缺少 susfs_def.h，注入声明..."
+                sed -i '/#include <linux\/mnt_idmapping.h>/a #ifdef CONFIG_KSU_SUSFS_SUS_MOUNT\n#include <linux\/susfs_def.h>\n#endif' ./fs/namespace.c
+                if ! grep -q 'extern bool susfs_is_current_ksu_domain' ./fs/namespace.c; then
+                  sed -i '/#include "internal.h"/a \\n#ifdef CONFIG_KSU_SUSFS_SUS_MOUNT\nextern bool susfs_is_current_ksu_domain(void);\nextern bool susfs_is_sdcard_android_data_decrypted __read_mostly;\n\n#define CL_COPY_MNT_NS BIT(25)\n\nstatic DEFINE_IDA(susfs_mnt_id_ida);\nstatic DEFINE_IDA(susfs_mnt_group_ida);\n\n#endif' ./fs/namespace.c
+                fi
               fi
             fi
 
@@ -547,6 +553,14 @@ jobs:
                 sed -i '/#include <linux\/dma-buf.h>/a #include <linux\/susfs_def.h>' ./fs/proc/base.c
                 sed -i '/#include <linux\/dma-buf.h>/a #ifdef CONFIG_KSU_SUSFS_SUS_MAP' ./fs/proc/base.c
               fi
+              # 修复 ReSukiSU: SUSFS 补丁使用 SUSFS_IS_INODE_SUS_MAP / SUSFS_IS_INODE_OPEN_REDIRECT
+              # 但缺少 #include <linux/susfs.h>，导致编译报 undeclared identifier
+              if grep -q 'SUSFS_IS_INODE_SUS_MAP\|SUSFS_IS_INODE_OPEN_REDIRECT' ./fs/proc/base.c && ! grep -qF '#include <linux/susfs.h>' ./fs/proc/base.c; then
+                if ! grep -qF '#include <linux/dma-buf.h>' ./fs/proc/base.c; then
+                  sed -i '/#include <linux\/cpufreq_times.h>/a #include <linux\/dma-buf.h>' ./fs/proc/base.c
+                fi
+                sed -i '/#include <linux\/dma-buf.h>/a #include <linux\/susfs.h>' ./fs/proc/base.c
+              fi
               if [[ "$CURRENT_SUB" -le 58 ]]; then
                 cp $KERNEL_PATCHES/wild/susfs_fix_patches/v${SUSFS_VERSION}/a15-6.6/task_mmu.c.patch ./
                 patch -p1 < task_mmu.c.patch || true
@@ -561,6 +575,13 @@ jobs:
               if [ -f "$SETUID_HOOK" ]; then
                 sed -i 's/defined(CONFIG_KSU_MANUAL_HOOK))/!defined(CONFIG_KSU_SUSFS) \&\& defined(CONFIG_KSU_MANUAL_HOOK))/' "$SETUID_HOOK"
                 echo "已修复 setuid_hook.c 重复定义问题"
+              fi
+              # 修复 6.12: SUSFS 补丁在 exec.c 头部 hunk 因上下文不匹配而失败
+              # 原因: 6.12 内核在 ksm.h 和 uaccess.h 之间多了一行 #include <linux/dma-buf.h>
+              # 导致 susfs_def.h 头文件注入失败, 函数体中 susfs_is_current_proc_umounted() 未声明
+              if grep -q 'susfs_is_current_proc_umounted' ./fs/exec.c && ! grep -qF '#include <linux/susfs_def.h>' ./fs/exec.c; then
+                echo "检测到 exec.c 缺少 susfs_def.h，注入声明..."
+                sed -i '/#include <linux\/ksm\.h>/a #ifdef CONFIG_KSU_SUSFS\n#include <linux\/susfs_def.h>\n#endif' ./fs/exec.c
               fi
             fi
           fi
