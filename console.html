@@ -111,6 +111,10 @@
       <a class="btn ghost" href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">Create a PAT ↗</a>
     </div>
     <div class="banner" id="tokMsg"></div>
+    <p class="muted" style="font-size:11.5px;margin:10px 0 0">
+      💡 A token gives you <b>one-click builds</b> straight from this page (needs <b>Actions: R/W</b>; the patcher also needs <b>Contents: R/W</b>).
+      Don't want a token? Use the <b>“Open in GitHub Actions (no token)”</b> link under each build — it opens the workflow's Run page where you just press <b>Run workflow</b> while logged in to GitHub. No token needed for that path.
+    </p>
   </div>
 
   <div class="grid cols2">
@@ -148,6 +152,16 @@
         <option value="仅上传 AnyKernel3.zip">AnyKernel3.zip only</option>
         <option value="上传全部">Everything (boot img + zip)</option>
       </select>
+      <div class="row">
+        <div>
+          <label>Custom version name (optional)</label>
+          <input type="text" id="k_version" placeholder="e.g. CodeExia-ROG6">
+        </div>
+        <div>
+          <label>Custom build time (optional)</label>
+          <input type="text" id="k_btime" placeholder="blank / N = current UTC">
+        </div>
+      </div>
       <div class="toggles">
         <label class="tg"><input type="checkbox" id="t_susfs" checked> SUSFS</label>
         <label class="tg"><input type="checkbox" id="t_zram"> ZRAM (LZ4)</label>
@@ -157,6 +171,8 @@
         <label class="tg"><input type="checkbox" id="t_supp"> OnePlus 8E</label>
       </div>
       <button class="btn" id="runKernel">🚀 Start kernel build</button>
+      <a class="btn ghost" id="openKernel" target="_blank" rel="noopener"
+         style="display:inline-block;margin-top:8px;text-decoration:none">Open in GitHub Actions (no token) ↗</a>
       <div class="banner" id="kMsg"></div>
     </div>
 
@@ -185,8 +201,35 @@
       <select id="l_arch"><option>arm64</option><option>x86_64</option><option>both</option></select>
       <p class="muted" style="font-size:11.5px;margin:12px 0 0">Produces <code>&lt;kmi&gt;_kernelsu.ko</code> as a run artifact — flash-free root via boot.img patch in the manager.</p>
       <button class="btn alt" id="runLkm">🧩 Build kernelsu.ko</button>
+      <a class="btn ghost" id="openLkm" target="_blank" rel="noopener"
+         style="display:inline-block;margin-top:8px;text-decoration:none">Open in GitHub Actions (no token) ↗</a>
       <div class="banner" id="lMsg"></div>
     </div>
+  </div>
+
+  <!-- MULTI-KERNEL BUILD -->
+  <div class="card" style="margin-top:16px">
+    <h2><span class="dot"></span> Multi-version build <span class="muted" style="font-weight:400;font-size:11.5px">build several sub-versions at once</span></h2>
+    <div class="row">
+      <div>
+        <label>Kernel (KMI)</label>
+        <select id="m_kernel"></select>
+      </div>
+      <div>
+        <label>Variant</label>
+        <select id="m_variant">
+          <option>ReSukiSU</option><option>SukiSU</option>
+          <option>SukiSU(40726)</option><option>SukiSU(40548)</option><option>Official</option>
+        </select>
+      </div>
+    </div>
+    <label>Sub-versions to build <span class="muted" style="font-weight:400">(tick several — one build per tick)</span></label>
+    <div id="m_list" class="toggles" style="grid-template-columns:1fr 1fr 1fr;max-height:170px;overflow:auto;border:1px solid var(--border);border-radius:8px;padding:8px;margin-top:4px"></div>
+    <div class="row" style="margin-top:6px">
+      <button class="btn" id="runMulti" style="flex:2">🚀 Build all ticked (needs token)</button>
+      <a class="btn ghost" id="openMatrix" target="_blank" rel="noopener" style="text-decoration:none;align-self:center">Or: build the full matrix in Actions ↗</a>
+    </div>
+    <div class="banner" id="mMsg"></div>
   </div>
 
   <!-- BOOT PATCHER -->
@@ -301,23 +344,39 @@ $('#testTok').onclick=async()=>{
 
 // ---- populate kernel/patch dropdowns from data/*.json ----
 async function loadKernels(){
-  const sel=$('#k_kernel'); sel.innerHTML='';
-  Object.keys(KVER).forEach(kv=>{const o=document.createElement('option');o.value=kv;o.textContent=`${KVER[kv]} · ${kv}`;sel.appendChild(o);});
-  sel.value='5.15'; // device default
+  const sel=$('#k_kernel'), msel=$('#m_kernel'); sel.innerHTML=''; msel.innerHTML='';
+  Object.keys(KVER).forEach(kv=>{
+    const o=document.createElement('option');o.value=kv;o.textContent=`${KVER[kv]} · ${kv}`;sel.appendChild(o);
+    const o2=o.cloneNode(true);msel.appendChild(o2);});
+  sel.value='5.15'; msel.value='5.15'; // device default
   sel.onchange=loadPatches;
+  msel.onchange=buildMultiList;
+  await loadBranchStatus();
   await loadPatches();
 }
+let BRANCH_STATUS={};
+async function loadBranchStatus(){
+  const [o,n]=repo().split('/');
+  try{const r=await fetch(`https://raw.githubusercontent.com/${o}/${n}/${ref()}/data/branch_status.json`);
+    if(r.ok)BRANCH_STATUS=await r.json();}catch(e){}
+}
+function depOf(kv,date){try{return (BRANCH_STATUS[kv].dates[date])||'unknown';}catch(e){return 'unknown';}}
 async function loadPatches(){
-  const kv=$('#k_kernel').value, sel=$('#k_patch'); sel.innerHTML='<option>lts</option>';
+  const kv=$('#k_kernel').value, sel=$('#k_patch'); sel.innerHTML='<option value="lts">lts</option>';
   const [o,n]=repo().split('/'); const rf=ref();
   try{
     const url=`https://raw.githubusercontent.com/${o}/${n}/${rf}/data/${KVER[kv]}/${kv}.json`;
     const r=await fetch(url); if(!r.ok)throw 0; const j=await r.json();
     (j.entries||[]).slice().reverse().forEach(e=>{
-      const op=document.createElement('option');op.value=e.date;op.textContent=`${e.date}  →  ${e.kernel}`;sel.appendChild(op);});
-    if(j.lts){sel.querySelector('option').textContent=`lts  →  ${j.lts} (latest)`;}
+      const st=depOf(kv,e.date);
+      const op=document.createElement('option');op.value=e.date;
+      op.textContent=`${e.date}  →  ${e.kernel}`+(st==='deprecated'?'   ⚠ deprecated':(st==='active'?'   ✓':''));
+      if(st==='deprecated')op.style.color='var(--warn)';
+      sel.appendChild(op);});
+    if(j.lts){sel.querySelector('option').textContent=`lts  →  ${j.lts} (latest, recommended)`;}
   }catch(e){/* keep lts only */}
   sel.value='lts';
+  buildMultiList();
 }
 
 // ---- dispatch ----
@@ -334,21 +393,69 @@ async function dispatch(wf,inputs,msgEl,btn){
   finally{btn.disabled=false;}
 }
 
-$('#runKernel').onclick=()=>dispatch('kernel-custom.yml',{
+// per-version matrix workflow (whole matrix, no-token friendly)
+const WF_MATRIX={'5.10':'kernel-a12-5-10.yml','5.15':'kernel-a13-5-15.yml',
+  '6.1':'kernel-a14-6-1.yml','6.6':'kernel-a15-6-6.yml','6.12':'kernel-a16-6-12.yml'};
+function actionsUrl(wf){return `https://github.com/${repo()}/actions/workflows/${wf}`;}
+
+function kernelInputs(){return {
   kernel_version:$('#k_kernel').value,
   os_patch_level:$('#k_patch').value,
   kernelsu_variant:$('#k_variant').value,
   use_kpm:$('#k_kpm').value,
   artifact_upload_mode:$('#k_upload').value,
+  version:$('#k_version').value.trim(), build_time:$('#k_btime').value.trim(),
   droidspaces:'off', droidspaces_ntsync:false,
   use_zram:$('#t_zram').checked, use_bbg:$('#t_bbg').checked,
   use_rekernel:$('#t_rekernel').checked, cve_2026_43499_patch:$('#t_cve').checked,
   cancel_susfs:!$('#t_susfs').checked, supp_op:$('#t_supp').checked
-},$('#kMsg'),$('#runKernel'));
-
+};}
+$('#runKernel').onclick=()=>dispatch('kernel-custom.yml',kernelInputs(),$('#kMsg'),$('#runKernel'));
 $('#runLkm').onclick=()=>dispatch('kernel-lkm.yml',{
   variant:$('#l_variant').value, kmi:$('#l_kmi').value, arch:$('#l_arch').value
 },$('#lMsg'),$('#runLkm'));
+
+// keep the "no token" deep-links pointing at the right Actions pages
+function syncActionLinks(){
+  $('#openKernel').href=actionsUrl('kernel-custom.yml');
+  $('#openLkm').href=actionsUrl('kernel-lkm.yml');
+  $('#openMatrix').href=actionsUrl(WF_MATRIX[$('#m_kernel').value]||'main.yml');
+}
+
+// ---- multi-version build ----
+function buildMultiList(){
+  const box=$('#m_list'); if(!box)return; box.innerHTML='';
+  const kv=($('#m_kernel')&&$('#m_kernel').value)||'5.15';
+  const [o,n]=repo().split('/');
+  const add=(val,label,dep)=>{const l=document.createElement('label');l.className='tg';
+    l.innerHTML=`<input type="checkbox" value="${val}"> <span${dep?' style="color:var(--warn)"':''}>${label}${dep?' ⚠':''}</span>`;box.appendChild(l);};
+  add('lts','lts (latest)',false);
+  fetch(`https://raw.githubusercontent.com/${o}/${n}/${ref()}/data/${KVER[kv]}/${kv}.json`)
+    .then(r=>r.ok?r.json():null).then(j=>{ if(!j)return;
+      j.entries.slice().reverse().forEach(e=>add(e.date,`${e.date} → ${e.kernel}`,depOf(kv,e.date)==='deprecated'));
+    }).catch(()=>{});
+  syncActionLinks();
+}
+$('#runMulti').onclick=async()=>{
+  if(!tok())return banner($('#mMsg'),'Multi-build needs a token. Without one, use the “full matrix in Actions” link →','err');
+  const picks=[...$('#m_list').querySelectorAll('input:checked')].map(x=>x.value);
+  if(!picks.length)return banner($('#mMsg'),'Tick at least one sub-version.','err');
+  const kv=$('#m_kernel').value, variant=$('#m_variant').value;
+  $('#runMulti').disabled=true; let ok=0,fail=0;
+  for(const p of picks){
+    try{
+      const r=await fetch(`${API}/repos/${repo()}/actions/workflows/kernel-custom.yml/dispatches`,{method:'POST',
+        headers:hdr(true),body:JSON.stringify({ref:ref(),inputs:{
+          kernel_version:kv, os_patch_level:p, kernelsu_variant:variant,
+          use_kpm:'disabled (关闭)', artifact_upload_mode:'仅上传 AnyKernel3.zip',
+          use_zram:false,use_bbg:false,cancel_susfs:false}})});
+      if(r.status===204)ok++;else fail++;
+      await new Promise(r=>setTimeout(r,800));
+    }catch(e){fail++;}
+  }
+  banner($('#mMsg'),`Queued ${ok} build(s)${fail?`, ${fail} failed`:''}. See Recent runs.`,fail?'err':'ok');
+  $('#runMulti').disabled=false; setTimeout(loadRuns,3500);
+};
 
 // ---- upstream versions ----
 async function loadVersions(){
