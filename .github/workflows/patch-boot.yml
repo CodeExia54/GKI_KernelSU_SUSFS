@@ -152,6 +152,7 @@ jobs:
         id: patch
         run: |
           cd work
+          mkdir -p out
           set +e
           ../src/userspace/ksud/target/release/ksud boot-patch \
             -b "${{ inputs.asset_name }}" \
