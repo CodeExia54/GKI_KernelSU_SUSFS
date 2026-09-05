@@ -259,17 +259,17 @@
     </div>
   </div>
 
-  <!-- MULTI-KERNEL BUILD -->
+  <!-- MULTI-KERNEL BUILD (queue) -->
   <div class="card" style="margin-top:16px">
-    <h2><span class="dot"></span> Multi build <span class="muted" style="font-weight:400;font-size:11.5px">queue several builds at once</span></h2>
-    <div class="seg" id="m_mode">
-      <button data-mode="sub" class="on">Sub-versions (one KMI)</button>
-      <button data-mode="kmi">Multiple KMIs (lts)</button>
-    </div>
-    <div class="row" style="margin-top:10px">
-      <div id="m_kernelWrap">
+    <h2><span class="dot"></span> Multi build <span class="muted" style="font-weight:400;font-size:11.5px">queue any mix of KMI + sub-version, build them all</span></h2>
+    <div class="row">
+      <div>
         <label>Kernel (KMI)</label>
         <select id="m_kernel"></select>
+      </div>
+      <div>
+        <label>Sub-version</label>
+        <select id="m_patch"></select>
       </div>
       <div>
         <label>Variant</label>
@@ -279,11 +279,13 @@
         </select>
       </div>
     </div>
-    <label id="m_listLabel">Sub-versions to build <span class="muted" style="font-weight:400">(tick several — one build per tick)</span></label>
-    <div id="m_list" class="toggles" style="grid-template-columns:1fr 1fr 1fr;max-height:180px;overflow:auto;border:1px solid var(--border);border-radius:var(--radius-sm);padding:9px;margin-top:4px"></div>
-    <div class="row" style="margin-top:8px">
-      <button class="btn" id="runMulti" style="flex:2">🚀 Build all ticked (needs token)</button>
-      <a class="btn ghost" id="openMatrix" target="_blank" rel="noopener" style="text-decoration:none;align-self:center">Or: full matrix in Actions ↗</a>
+    <button class="btn ghost" id="addQueue" style="margin-top:12px">➕ Add to queue</button>
+    <label style="margin-top:14px">Build queue — <b id="qCount">0</b> item(s) <span class="muted" style="font-weight:400">(each fires its own build)</span></label>
+    <div class="list" id="m_queue"><div class="muted" style="font-size:12px">Queue is empty. Add any KMI + sub-version combos above.</div></div>
+    <div class="row" style="margin-top:10px">
+      <button class="btn" id="runMulti" style="flex:2">🚀 Build all queued (needs token)</button>
+      <button class="btn ghost" id="clearQueue" style="align-self:center">Clear</button>
+      <a class="btn ghost" id="openMatrix" target="_blank" rel="noopener" style="text-decoration:none;align-self:center">full matrix ↗</a>
     </div>
     <div class="banner" id="mMsg"></div>
   </div>
@@ -406,9 +408,10 @@ async function loadKernels(){
     const o2=o.cloneNode(true);msel.appendChild(o2);});
   sel.value='5.15'; msel.value='5.15'; // device default
   sel.onchange=loadPatches;
-  msel.onchange=buildMultiList;
+  msel.onchange=loadMPatches;
   await loadBranchStatus();
   await loadPatches();
+  await loadMPatches();
 }
 let BRANCH_STATUS={};
 async function loadBranchStatus(){
@@ -432,7 +435,6 @@ async function loadPatches(){
     if(j.lts){sel.querySelector('option').textContent=`lts  →  ${j.lts} (latest, recommended)`;}
   }catch(e){/* keep lts only */}
   sel.value='lts';
-  buildMultiList();
 }
 
 // ---- dispatch ----
@@ -478,57 +480,61 @@ function syncActionLinks(){
   $('#openMatrix').href=actionsUrl(WF_MATRIX[$('#m_kernel').value]||'main.yml');
 }
 
-// ---- multi build (two modes: sub-versions of one KMI, or multiple KMIs @ lts) ----
-let MULTI_MODE='sub';
-$('#m_mode').querySelectorAll('button').forEach(b=>b.onclick=()=>{
-  MULTI_MODE=b.dataset.mode;
-  $('#m_mode').querySelectorAll('button').forEach(x=>x.classList.toggle('on',x===b));
-  $('#m_kernelWrap').style.display = MULTI_MODE==='kmi' ? 'none':'';
-  $('#m_listLabel').innerHTML = MULTI_MODE==='kmi'
-    ? 'KMIs to build <span class="muted" style="font-weight:400">(each built at latest LTS)</span>'
-    : 'Sub-versions to build <span class="muted" style="font-weight:400">(tick several — one build per tick)</span>';
-  buildMultiList();
-});
-function buildMultiList(){
-  const box=$('#m_list'); if(!box)return; box.innerHTML='';
+// ---- multi build: a free queue of any KMI + sub-version combos ----
+let QUEUE=[];
+// populate the multi sub-version dropdown for the chosen KMI (with deprecation flags)
+async function loadMPatches(){
+  const sel=$('#m_patch'); if(!sel)return; const kv=$('#m_kernel').value;
+  sel.innerHTML='<option value="lts">lts → latest</option>';
   const [o,n]=repo().split('/');
-  const add=(val,label,dep)=>{const l=document.createElement('label');l.className='tg';
-    l.innerHTML=`<input type="checkbox" value="${val}"> <span${dep?' style="color:var(--warn)"':''}>${label}${dep?' ⚠':''}</span>`;box.appendChild(l);};
-  if(MULTI_MODE==='kmi'){
-    Object.keys(KVER).forEach(kv=>add(kv,`${KVER[kv]} · ${kv}`,false));
-    // preselect the device KMI
-    const d=[...box.querySelectorAll('input')].find(i=>i.value==='5.15'); if(d)d.checked=true;
-    syncActionLinks(); return;
-  }
-  const kv=($('#m_kernel')&&$('#m_kernel').value)||'5.15';
-  add('lts','lts (latest)',false);
-  fetch(`https://raw.githubusercontent.com/${o}/${n}/${ref()}/data/${KVER[kv]}/${kv}.json`)
-    .then(r=>r.ok?r.json():null).then(j=>{ if(!j)return;
-      j.entries.slice().reverse().forEach(e=>add(e.date,`${e.date} → ${e.kernel}`,depOf(kv,e.date)==='deprecated'));
-    }).catch(()=>{});
+  try{
+    const r=await fetch(`https://raw.githubusercontent.com/${o}/${n}/${ref()}/data/${KVER[kv]}/${kv}.json`);
+    if(r.ok){const j=await r.json();
+      if(j.lts)sel.querySelector('option').textContent=`lts → ${j.lts} (latest)`;
+      j.entries.slice().reverse().forEach(e=>{const st=depOf(kv,e.date);
+        const op=document.createElement('option');op.value=e.date;
+        op.textContent=`${e.date} → ${e.kernel}`+(st==='deprecated'?'  ⚠ deprecated':(st==='active'?'  ✓':''));
+        if(st==='deprecated')op.style.color='var(--warn)'; sel.appendChild(op);});
+    }
+  }catch(e){}
   syncActionLinks();
 }
-async function dispatchOne(kernel_version,os_patch_level,variant){
+function renderQueue(){
+  const box=$('#m_queue'); $('#qCount').textContent=QUEUE.length;
+  if(!QUEUE.length){box.innerHTML='<div class="muted" style="font-size:12px">Queue is empty. Add any KMI + sub-version combos above.</div>';return;}
+  box.innerHTML='';
+  QUEUE.forEach((it,i)=>{const el=document.createElement('div');el.className='item';
+    el.innerHTML=`<span class="st idle"></span>
+      <span class="grow"><b>${KVER[it.kv]}·${it.kv}</b> — ${it.patch} <span class="muted">· ${it.variant}</span></span>
+      <button class="btn ghost" data-i="${i}" style="padding:3px 9px">✕</button>`;
+    el.querySelector('button').onclick=()=>{QUEUE.splice(i,1);renderQueue();};
+    box.appendChild(el);});
+}
+$('#addQueue').onclick=()=>{
+  const kv=$('#m_kernel').value, patch=$('#m_patch').value, variant=$('#m_variant').value;
+  if(QUEUE.some(x=>x.kv===kv&&x.patch===patch&&x.variant===variant))
+    return banner($('#mMsg'),'That combo is already queued.','err');
+  QUEUE.push({kv,patch,variant}); renderQueue(); banner($('#mMsg'),`Added ${KVER[kv]}·${kv} — ${patch}. Add more or build.`,'ok');
+};
+$('#clearQueue').onclick=()=>{QUEUE=[];renderQueue();$('#mMsg').className='banner';};
+async function dispatchOne(kv,patch,variant){
   const r=await fetch(`${API}/repos/${repo()}/actions/workflows/kernel-custom.yml/dispatches`,{method:'POST',
     headers:hdr(true),body:JSON.stringify({ref:ref(),inputs:{
-      kernel_version, os_patch_level, kernelsu_variant:variant,
+      kernel_version:kv, os_patch_level:patch, kernelsu_variant:variant,
       use_kpm:'disabled (关闭)', artifact_upload_mode:'仅上传 AnyKernel3.zip',
       use_zram:false,use_bbg:false,cancel_susfs:false}})});
   return r.status===204;
 }
 $('#runMulti').onclick=async()=>{
-  if(!tok())return banner($('#mMsg'),'Multi build needs a token. Without one, use the “full matrix in Actions” link →','err');
-  const picks=[...$('#m_list').querySelectorAll('input:checked')].map(x=>x.value);
-  if(!picks.length)return banner($('#mMsg'),'Tick at least one item.','err');
-  const variant=$('#m_variant').value;
-  $('#runMulti').disabled=true; banner($('#mMsg'),`Queuing ${picks.length} build(s)…`,'ok'); let ok=0,fail=0;
-  for(const p of picks){
-    try{
-      const good = MULTI_MODE==='kmi'
-        ? await dispatchOne(p,'lts',variant)          // p = kernel_version, lts
-        : await dispatchOne($('#m_kernel').value,p,variant); // p = os_patch_level
-      good?ok++:fail++;
-    }catch(e){fail++;}
+  if(!tok())return banner($('#mMsg'),'Multi build needs a token. Without one, use the “full matrix” link (builds one whole KMI).','err');
+  if(!QUEUE.length)return banner($('#mMsg'),'Add at least one build to the queue.','err');
+  $('#runMulti').disabled=true; banner($('#mMsg'),`Queuing ${QUEUE.length} build(s)…`,'ok'); let ok=0,fail=0;
+  const rows=[...$('#m_queue').querySelectorAll('.item .st')];
+  for(let i=0;i<QUEUE.length;i++){const it=QUEUE[i];
+    if(rows[i]){rows[i].className='st run';}
+    try{const good=await dispatchOne(it.kv,it.patch,it.variant); good?ok++:fail++;
+      if(rows[i])rows[i].className='st '+(good?'ok':'fail');}
+    catch(e){fail++;if(rows[i])rows[i].className='st fail';}
     await new Promise(r=>setTimeout(r,800));
   }
   banner($('#mMsg'),`Queued ${ok} build(s)${fail?`, ${fail} failed`:''}. See Recent runs.`,fail?'err':'ok');
