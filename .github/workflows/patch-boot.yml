@@ -90,10 +90,10 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y clang libclang-dev llvm curl jq
 
-      - name: 安装 Rust (stable, edition 2024)
+      - name: 安装 Rust (nightly, ksud 需要 feature flags)
         run: |
-          rustup update stable
-          rustup default stable
+          rustup toolchain install nightly --profile minimal
+          rustup default nightly
           rustc --version
 
       - name: 缓存 cargo 构建
