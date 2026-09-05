@@ -62,25 +62,60 @@ jobs:
     name: "Patch ${{ inputs.asset_name }} · ${{ inputs.kmi }} · ${{ inputs.variant }}"
     runs-on: ubuntu-latest
     steps:
-      - name: 检出本仓库 (取 lkm/*.ko)
+      - name: 检出本仓库 (取 lkm/ 资源)
         uses: actions/checkout@v7
+        with:
+          path: self
 
       - name: 解析变体源
         id: v
         run: |
           case "${{ inputs.variant }}" in
-            "ReSukiSU")      REPO="ReSukiSU/ReSukiSU" ;;
-            "SukiSU-Ultra")  REPO="SukiSU-Ultra/SukiSU-Ultra" ;;
-            "KernelSU")      REPO="tiann/KernelSU" ;;
-            "KernelSU-Next") REPO="KernelSU-Next/KernelSU-Next" ;;
+            "ReSukiSU")      echo "repo=ReSukiSU/ReSukiSU" >> "$GITHUB_OUTPUT"; echo "ref=main" >> "$GITHUB_OUTPUT" ;;
+            "SukiSU-Ultra")  echo "repo=SukiSU-Ultra/SukiSU-Ultra" >> "$GITHUB_OUTPUT"; echo "ref=main" >> "$GITHUB_OUTPUT" ;;
+            "KernelSU")      echo "repo=tiann/KernelSU" >> "$GITHUB_OUTPUT"; echo "ref=main" >> "$GITHUB_OUTPUT" ;;
+            "KernelSU-Next") echo "repo=KernelSU-Next/KernelSU-Next" >> "$GITHUB_OUTPUT"; echo "ref=next" >> "$GITHUB_OUTPUT" ;;
             *) echo "unknown variant"; exit 1 ;;
           esac
-          echo "repo=$REPO" >> "$GITHUB_OUTPUT"
 
-      - name: 安装 QEMU 与依赖
+      - name: 检出变体源码 (ksud)
+        uses: actions/checkout@v7
+        with:
+          repository: ${{ steps.v.outputs.repo }}
+          ref: ${{ steps.v.outputs.ref }}
+          path: src
+
+      - name: 安装依赖
         run: |
           sudo apt-get update
-          sudo apt-get install -y qemu-user-static curl jq
+          sudo apt-get install -y clang libclang-dev llvm curl jq
+
+      - name: 安装 Rust (stable, edition 2024)
+        run: |
+          rustup update stable
+          rustup default stable
+          rustc --version
+
+      - name: 缓存 cargo 构建
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            src/userspace/ksud/target
+          key: ksud-host-${{ inputs.variant }}-${{ hashFiles('src/userspace/ksud/Cargo.lock') }}
+          restore-keys: ksud-host-${{ inputs.variant }}-
+
+      - name: 编译 ksud (本机 x86_64 原生, 无需 bionic/QEMU)
+        env:
+          ANDROID_NDK_HOME: ${{ env.ANDROID_NDK_HOME }}
+        run: |
+          cd src/userspace/ksud
+          # build.rs 需要 NDK clang 汇编 aarch64 bootstrap；runner 自带 NDK
+          echo "ANDROID_NDK_HOME=$ANDROID_NDK_HOME"
+          cargo build --release --bin ksud
+          ls -la target/release/ksud
+          ./target/release/ksud --version || true
 
       - name: 下载原始镜像 (来自临时 Release)
         env:
@@ -90,8 +125,6 @@ jobs:
           gh release download "${{ inputs.release_tag }}" \
             -R "${{ github.repository }}" \
             -p "${{ inputs.asset_name }}" -D work
-          ls -la work
-          # 校验是 Android boot 镜像
           MAGIC=$(head -c 8 "work/${{ inputs.asset_name }}")
           echo "magic: $MAGIC"
           if [ "$MAGIC" != "ANDROID!" ]; then
@@ -99,66 +132,32 @@ jobs:
             exit 1
           fi
 
-      - name: 准备 kernelsu.ko
+      - name: 准备 kernelsu.ko 与 ksuinit
         run: |
-          KO="lkm/${{ inputs.kmi }}_kernelsu.ko"
+          KO="self/lkm/${{ inputs.kmi }}_kernelsu.ko"
+          INIT="self/lkm/ksuinit-aarch64"
           if [ ! -f "$KO" ]; then
-            echo "::error::仓库缺少 $KO —— 请先用 '构建 LKM' 工作流生成该 KMI 的 .ko 并放到 lkm/ 目录"
+            echo "::error::仓库缺少 $KO —— 请先用 '构建 LKM' 工作流生成该 KMI 的 .ko 放到 lkm/"
+            exit 1
+          fi
+          if [ ! -f "$INIT" ]; then
+            echo "::error::仓库缺少 $INIT (ksuinit)"
             exit 1
           fi
           cp "$KO" work/kernelsu.ko
-          ls -la work/kernelsu.ko
+          cp "$INIT" work/ksuinit
+          ls -la work
 
-      - name: 下载预编译 ksud (aarch64, 变体 release)
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          REPO="${{ steps.v.outputs.repo }}"
-          TAG="${{ inputs.ksud_release }}"
-          if [ -z "$TAG" ]; then
-            TAG=$(gh release list -R "$REPO" -L 20 --json tagName,isPrerelease \
-              --jq 'map(.tagName)[0]')
-          fi
-          echo "ksud release: $REPO@$TAG"
-          URL=$(gh release view "$TAG" -R "$REPO" --json assets \
-            --jq '.assets[] | select(.name=="ksud-aarch64-linux-android") | .url')
-          test -n "$URL"
-          curl -fL -o work/ksud "$URL"
-          chmod +x work/ksud
-          file work/ksud || true
-
-      - name: 定位 aarch64 bionic 运行时 (NDK sysroot)
-        id: ndk
-        run: |
-          # runner 自带 ANDROID_NDK / ANDROID_NDK_HOME
-          NDK="${ANDROID_NDK_HOME:-$ANDROID_NDK}"
-          echo "NDK=$NDK"
-          SYSROOT="$NDK/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
-          LINKER=$(find "$NDK" -name 'linker64' 2>/dev/null | head -1 || true)
-          LIBDIR=$(dirname "$(find "$SYSROOT" -path '*aarch64-linux-android/libc.so' | head -1)")
-          echo "sysroot=$SYSROOT"  >> "$GITHUB_OUTPUT"
-          echo "libdir=$LIBDIR"    >> "$GITHUB_OUTPUT"
-          echo "SYSROOT=$SYSROOT LIBDIR=$LIBDIR LINKER=$LINKER"
-          # 构造 QEMU_LD_PREFIX 根，提供 /system/bin/linker64 与库搜索路径
-          PREFIX="$RUNNER_TEMP/aarch64-root"
-          mkdir -p "$PREFIX/system/bin" "$PREFIX/system/lib64" "$PREFIX/lib"
-          [ -n "$LINKER" ] && cp "$LINKER" "$PREFIX/system/bin/linker64"
-          if [ -n "$LIBDIR" ]; then
-            cp -f "$LIBDIR"/libc.so "$LIBDIR"/libm.so "$LIBDIR"/libdl.so "$PREFIX/system/lib64/" 2>/dev/null || true
-            cp -f "$LIBDIR"/lib*.so "$PREFIX/lib/" 2>/dev/null || true
-          fi
-          echo "prefix=$PREFIX" >> "$GITHUB_OUTPUT"
-          find "$PREFIX" -type f | head
-
-      - name: 执行 boot-patch (QEMU aarch64)
+      - name: 执行 boot-patch (原生)
         id: patch
         run: |
           cd work
-          export QEMU_LD_PREFIX="${{ steps.ndk.outputs.prefix }}"
           set +e
-          qemu-aarch64-static ./ksud boot-patch \
+          ../src/userspace/ksud/target/release/ksud boot-patch \
             -b "${{ inputs.asset_name }}" \
             -m kernelsu.ko \
+            -i ksuinit \
+            --arch aarch64 \
             --kmi "${{ inputs.kmi }}" \
             -o out --out-name "patched-${{ inputs.kmi }}-${{ inputs.asset_name }}" 2>&1 | tee patch.log
           RC=${PIPESTATUS[0]}
@@ -167,10 +166,9 @@ jobs:
           ls -la out 2>/dev/null || true
           OUT=$(ls out/patched-*.img 2>/dev/null | head -1 || true)
           if [ -z "$OUT" ] || [ "$RC" -ne 0 ]; then
-            echo "::error::打补丁失败 (rc=$RC)。日志见下方与 patch.log 附件。"
+            echo "::error::打补丁失败 (rc=$RC)。日志见 patch.log 附件。"
             exit 1
           fi
-          # 校验输出仍是 Android 镜像
           if [ "$(head -c 8 "$OUT")" != "ANDROID!" ]; then
             echo "::error::输出不是有效的 Android 镜像"
             exit 1
