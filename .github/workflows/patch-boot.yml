@@ -1,0 +1,194 @@
+# ========================================
+# 在线 init_boot / boot 打补丁 (LKM)
+# ========================================
+# 通过临时 Release 传输镜像：
+#   页面创建 Release -> 上传原始镜像为附件 -> 触发本工作流
+#   -> 用 ReSukiSU 预编译 ksud (QEMU 运行, 内置 ksuinit) + 对应 KMI 的
+#      kernelsu.ko 给镜像打补丁 -> 把补丁后的镜像作为附件传回同一个 Release
+#   -> 页面轮询到补丁附件后给出下载链接。
+# 说明：ksud 只处理镜像文件，不刷机；失败只会让本次运行失败，
+#      不会产出损坏镜像。仓库不会因此膨胀（镜像走 Release，不进 git）。
+# ========================================
+
+name: 在线打补丁 (init_boot LKM)
+
+permissions:
+  contents: write
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "临时 Release tag（页面自动生成，附带原始镜像）"
+        required: true
+        type: string
+      asset_name:
+        description: "原始镜像附件名"
+        required: true
+        type: string
+        default: "input-init_boot.img"
+      kmi:
+        description: "KMI 版本"
+        required: true
+        type: choice
+        default: android13-5.15
+        options:
+          - android12-5.10
+          - android13-5.10
+          - android13-5.15
+          - android14-5.15
+          - android14-6.1
+          - android15-6.6
+          - android16-6.12
+          - android17-6.18
+      variant:
+        description: "Root 变体 (ksud 来源)"
+        required: true
+        type: choice
+        default: ReSukiSU
+        options:
+          - ReSukiSU
+          - SukiSU-Ultra
+          - KernelSU
+          - KernelSU-Next
+      ksud_release:
+        description: "ksud release tag（留空=各变体 latest）"
+        required: false
+        type: string
+        default: ""
+
+jobs:
+  patch:
+    name: "Patch ${{ inputs.asset_name }} · ${{ inputs.kmi }} · ${{ inputs.variant }}"
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出本仓库 (取 lkm/*.ko)
+        uses: actions/checkout@v7
+
+      - name: 解析变体源
+        id: v
+        run: |
+          case "${{ inputs.variant }}" in
+            "ReSukiSU")      REPO="ReSukiSU/ReSukiSU" ;;
+            "SukiSU-Ultra")  REPO="SukiSU-Ultra/SukiSU-Ultra" ;;
+            "KernelSU")      REPO="tiann/KernelSU" ;;
+            "KernelSU-Next") REPO="KernelSU-Next/KernelSU-Next" ;;
+            *) echo "unknown variant"; exit 1 ;;
+          esac
+          echo "repo=$REPO" >> "$GITHUB_OUTPUT"
+
+      - name: 安装 QEMU 与依赖
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y qemu-user-static curl jq
+
+      - name: 下载原始镜像 (来自临时 Release)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p work
+          gh release download "${{ inputs.release_tag }}" \
+            -R "${{ github.repository }}" \
+            -p "${{ inputs.asset_name }}" -D work
+          ls -la work
+          # 校验是 Android boot 镜像
+          MAGIC=$(head -c 8 "work/${{ inputs.asset_name }}")
+          echo "magic: $MAGIC"
+          if [ "$MAGIC" != "ANDROID!" ]; then
+            echo "::error::上传的文件不是 Android boot/init_boot 镜像 (缺少 ANDROID! 魔数)"
+            exit 1
+          fi
+
+      - name: 准备 kernelsu.ko
+        run: |
+          KO="lkm/${{ inputs.kmi }}_kernelsu.ko"
+          if [ ! -f "$KO" ]; then
+            echo "::error::仓库缺少 $KO —— 请先用 '构建 LKM' 工作流生成该 KMI 的 .ko 并放到 lkm/ 目录"
+            exit 1
+          fi
+          cp "$KO" work/kernelsu.ko
+          ls -la work/kernelsu.ko
+
+      - name: 下载预编译 ksud (aarch64, 变体 release)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          REPO="${{ steps.v.outputs.repo }}"
+          TAG="${{ inputs.ksud_release }}"
+          if [ -z "$TAG" ]; then
+            TAG=$(gh release list -R "$REPO" -L 20 --json tagName,isPrerelease \
+              --jq 'map(.tagName)[0]')
+          fi
+          echo "ksud release: $REPO@$TAG"
+          URL=$(gh release view "$TAG" -R "$REPO" --json assets \
+            --jq '.assets[] | select(.name=="ksud-aarch64-linux-android") | .url')
+          test -n "$URL"
+          curl -fL -o work/ksud "$URL"
+          chmod +x work/ksud
+          file work/ksud || true
+
+      - name: 定位 aarch64 bionic 运行时 (NDK sysroot)
+        id: ndk
+        run: |
+          # runner 自带 ANDROID_NDK / ANDROID_NDK_HOME
+          NDK="${ANDROID_NDK_HOME:-$ANDROID_NDK}"
+          echo "NDK=$NDK"
+          SYSROOT="$NDK/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
+          LINKER=$(find "$NDK" -name 'linker64' 2>/dev/null | head -1 || true)
+          LIBDIR=$(dirname "$(find "$SYSROOT" -path '*aarch64-linux-android/libc.so' | head -1)")
+          echo "sysroot=$SYSROOT"  >> "$GITHUB_OUTPUT"
+          echo "libdir=$LIBDIR"    >> "$GITHUB_OUTPUT"
+          echo "SYSROOT=$SYSROOT LIBDIR=$LIBDIR LINKER=$LINKER"
+          # 构造 QEMU_LD_PREFIX 根，提供 /system/bin/linker64 与库搜索路径
+          PREFIX="$RUNNER_TEMP/aarch64-root"
+          mkdir -p "$PREFIX/system/bin" "$PREFIX/system/lib64" "$PREFIX/lib"
+          [ -n "$LINKER" ] && cp "$LINKER" "$PREFIX/system/bin/linker64"
+          if [ -n "$LIBDIR" ]; then
+            cp -f "$LIBDIR"/libc.so "$LIBDIR"/libm.so "$LIBDIR"/libdl.so "$PREFIX/system/lib64/" 2>/dev/null || true
+            cp -f "$LIBDIR"/lib*.so "$PREFIX/lib/" 2>/dev/null || true
+          fi
+          echo "prefix=$PREFIX" >> "$GITHUB_OUTPUT"
+          find "$PREFIX" -type f | head
+
+      - name: 执行 boot-patch (QEMU aarch64)
+        id: patch
+        run: |
+          cd work
+          export QEMU_LD_PREFIX="${{ steps.ndk.outputs.prefix }}"
+          set +e
+          qemu-aarch64-static ./ksud boot-patch \
+            -b "${{ inputs.asset_name }}" \
+            -m kernelsu.ko \
+            --kmi "${{ inputs.kmi }}" \
+            -o out --out-name "patched-${{ inputs.kmi }}-${{ inputs.asset_name }}" 2>&1 | tee patch.log
+          RC=${PIPESTATUS[0]}
+          set -e
+          echo "ksud rc=$RC"
+          ls -la out 2>/dev/null || true
+          OUT=$(ls out/patched-*.img 2>/dev/null | head -1 || true)
+          if [ -z "$OUT" ] || [ "$RC" -ne 0 ]; then
+            echo "::error::打补丁失败 (rc=$RC)。日志见下方与 patch.log 附件。"
+            exit 1
+          fi
+          # 校验输出仍是 Android 镜像
+          if [ "$(head -c 8 "$OUT")" != "ANDROID!" ]; then
+            echo "::error::输出不是有效的 Android 镜像"
+            exit 1
+          fi
+          echo "out=$OUT" >> "$GITHUB_OUTPUT"
+
+      - name: 上传补丁镜像到 Release
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release upload "${{ inputs.release_tag }}" "work/${{ steps.patch.outputs.out }}" \
+            -R "${{ github.repository }}" --clobber
+
+      - name: 上传日志 (失败时排查用)
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: patch-log-${{ inputs.kmi }}
+          path: work/patch.log
+          if-no-files-found: ignore

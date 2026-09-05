@@ -189,6 +189,41 @@
     </div>
   </div>
 
+  <!-- BOOT PATCHER -->
+  <div class="card" style="margin-top:16px">
+    <h2><span class="dot" style="background:var(--warn)"></span> init_boot Patcher <span class="muted" style="font-weight:400;font-size:11.5px">upload → patch (LKM) → download</span></h2>
+    <p class="muted" style="font-size:11.5px;margin:0 0 10px">
+      Patches your stock <code>init_boot.img</code> (or boot.img) with the KernelSU LKM using ReSukiSU's own <code>ksud</code> in CI — the same result the manager produces, without the manager. Your image travels via a temporary private-to-your-repo Release and is auto-deleted after download, so nothing piles up.
+    </p>
+    <div class="row">
+      <div>
+        <label>Image file (init_boot.img / boot.img)</label>
+        <input type="text" id="p_fileLabel" readonly placeholder="no file selected" style="cursor:pointer">
+        <input type="file" id="p_file" accept=".img" hidden>
+      </div>
+      <div>
+        <label>KMI</label>
+        <select id="p_kmi">
+          <option>android12-5.10</option><option>android13-5.10</option>
+          <option selected>android13-5.15</option><option>android14-5.15</option>
+          <option>android14-6.1</option><option>android15-6.6</option>
+          <option>android16-6.12</option><option>android17-6.18</option>
+        </select>
+      </div>
+      <div>
+        <label>Variant (ksud source)</label>
+        <select id="p_variant">
+          <option>ReSukiSU</option><option>SukiSU-Ultra</option>
+          <option>KernelSU</option><option>KernelSU-Next</option>
+        </select>
+      </div>
+    </div>
+    <button class="btn" id="runPatch" style="background:var(--warn);color:#1a1400">🩹 Upload &amp; patch</button>
+    <div class="banner" id="pMsg"></div>
+    <div class="log" id="pLog" hidden></div>
+    <div id="pResult" hidden style="margin-top:12px"></div>
+  </div>
+
   <div class="grid cols2" style="margin-top:16px">
     <!-- UPSTREAM VERSIONS -->
     <div class="card">
@@ -362,6 +397,66 @@ async function loadRuns(){
 
 $('#refreshVer').onclick=loadVersions;
 $('#refreshRuns').onclick=loadRuns;
+
+// ---- boot patcher ----
+let patchFile=null;
+$('#p_fileLabel').onclick=()=>$('#p_file').click();
+$('#p_file').onchange=e=>{patchFile=e.target.files[0];
+  $('#p_fileLabel').value=patchFile?`${patchFile.name} (${(patchFile.size/1048576).toFixed(1)} MB)`:'';};
+function plog(m){const el=$('#pLog');el.hidden=false;el.textContent+=m+'\n';el.scrollTop=el.scrollHeight;}
+async function gh(path,opt){const r=await fetch(API+path,{...opt,headers:{...hdr(true),...(opt&&opt.headers||{})}});
+  if(!r.ok){const t=await r.text();throw new Error(`${r.status} ${path} — ${t.slice(0,180)}`);}
+  return r.status===204?null:r.json();}
+
+$('#runPatch').onclick=async()=>{
+  const btn=$('#runPatch');
+  if(!tok())return banner($('#pMsg'),'Add & save a token first (Actions R/W + Contents R/W).','err');
+  if(!patchFile)return banner($('#pMsg'),'Choose an init_boot.img first.','err');
+  btn.disabled=true; $('#pLog').textContent=''; $('#pResult').hidden=true;
+  const kmi=$('#p_kmi').value, variant=$('#p_variant').value;
+  const tag='boot-patch-'+Date.now();
+  const assetName='input-'+(patchFile.name.replace(/[^A-Za-z0-9._-]/g,'_'));
+  try{
+    banner($('#pMsg'),'Working… keep this tab open.','ok');
+    plog('• creating temporary release '+tag);
+    const rel=await gh(`/repos/${repo()}/releases`,{method:'POST',
+      body:JSON.stringify({tag_name:tag,name:tag,prerelease:true,
+        body:'Temporary transport for boot patching. Safe to delete.'})});
+    plog('• uploading image ('+(patchFile.size/1048576).toFixed(1)+' MB)…');
+    const buf=await patchFile.arrayBuffer();
+    const up=await fetch(`https://uploads.github.com/repos/${repo()}/releases/${rel.id}/assets?name=${encodeURIComponent(assetName)}`,
+      {method:'POST',headers:{...hdr(true),'Content-Type':'application/octet-stream'},body:buf});
+    if(!up.ok)throw new Error('asset upload failed: '+up.status+' '+(await up.text()).slice(0,160));
+    plog('• image uploaded');
+    plog('• dispatching patch-boot.yml');
+    await gh(`/repos/${repo()}/actions/workflows/patch-boot.yml/dispatches`,{method:'POST',
+      body:JSON.stringify({ref:ref(),inputs:{release_tag:tag,asset_name:assetName,kmi,variant}})});
+    loadRuns();
+    plog('• patching in CI (≈2–4 min)…');
+    let done=null;
+    for(let i=0;i<80;i++){
+      await new Promise(r=>setTimeout(r,6000));
+      const r=await gh(`/repos/${repo()}/releases/${rel.id}`);
+      const a=(r.assets||[]).find(x=>x.name.startsWith('patched-'));
+      if(a){done=a;break;}
+      if(i===6||i%8===0)plog('  …still working ('+((i+1)*6)+'s)');
+    }
+    if(!done)throw new Error('timed out — check Recent runs for the patch job log.');
+    plog('• patched image ready: '+done.name);
+    banner($('#pMsg'),'✓ Done! Download below. Delete the temp release once you have the file.','ok');
+    $('#pResult').hidden=false;
+    $('#pResult').innerHTML=`<a class="btn" style="display:inline-block;width:auto;text-decoration:none;text-align:center"
+        href="${done.browser_download_url}" download>⬇ Download ${done.name}</a>
+        <button class="btn ghost" id="cleanupRel" style="margin-left:8px">Delete temp release now</button>
+        <p class="muted" style="font-size:11px;margin-top:8px">Flash with <code>fastboot flash init_boot ${done.name}</code> — back up your stock init_boot first.</p>`;
+    $('#cleanupRel').onclick=async()=>{try{await gh(`/repos/${repo()}/releases/${rel.id}`,{method:'DELETE'});
+      try{await gh(`/repos/${repo()}/git/refs/tags/${tag}`,{method:'DELETE'});}catch(e){}
+      $('#pResult').innerHTML='<span class="muted" style="font-size:12px">Temp release deleted. ✓</span>';}
+      catch(e){banner($('#pMsg'),'cleanup: '+e.message,'err');}};
+  }catch(e){
+    banner($('#pMsg'),'✗ '+e.message,'err'); plog('ERROR: '+e.message);
+  }finally{btn.disabled=false;}
+};
 
 // init
 loadKernels(); loadVersions(); if(tok())loadRuns();

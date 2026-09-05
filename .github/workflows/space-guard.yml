@@ -1,0 +1,85 @@
+# ========================================
+# 空间守护：自动清理，防止仓库存储溢出
+# ========================================
+# - 删除超过 1 天的临时打补丁 Release (tag: boot-patch-*) 及其 tag
+# - 删除超过 RETENTION_DAYS 天的旧 Actions artifacts
+# 每天运行一次，也可手动触发。
+# ========================================
+
+name: 空间守护 (自动清理)
+
+permissions:
+  contents: write
+  actions: write
+
+on:
+  schedule:
+    - cron: '17 3 * * *'   # 每天 03:17 UTC
+  workflow_dispatch:
+    inputs:
+      artifact_retention_days:
+        description: "保留最近多少天的 artifacts"
+        type: string
+        default: "3"
+
+env:
+  RETENTION_DAYS: ${{ github.event.inputs.artifact_retention_days || '3' }}
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 清理临时打补丁 Release (boot-patch-*, >1 天)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          NOW=$(date -u +%s)
+          gh release list -R "$REPO" -L 100 --json tagName,createdAt,name \
+            --jq '.[] | select(.tagName|startswith("boot-patch-")) | "\(.tagName)\t\(.createdAt)"' \
+          | while IFS=$'\t' read -r TAG CREATED; do
+              [ -z "$TAG" ] && continue
+              C=$(date -u -d "$CREATED" +%s 2>/dev/null || echo "$NOW")
+              AGE=$(( (NOW - C) / 3600 ))
+              if [ "$AGE" -ge 24 ]; then
+                echo "deleting $TAG (age ${AGE}h)"
+                gh release delete "$TAG" -R "$REPO" --yes --cleanup-tag || \
+                  gh release delete "$TAG" -R "$REPO" --yes || true
+              else
+                echo "keeping $TAG (age ${AGE}h)"
+              fi
+            done
+
+      - name: 清理旧 artifacts (> RETENTION_DAYS 天)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          NOW=$(date -u +%s)
+          KEEP=$(( ${RETENTION_DAYS} * 86400 ))
+          PAGE=1
+          while : ; do
+            RESP=$(gh api "repos/$REPO/actions/artifacts?per_page=100&page=$PAGE")
+            COUNT=$(echo "$RESP" | jq '.artifacts | length')
+            [ "$COUNT" = "0" ] && break
+            echo "$RESP" | jq -r '.artifacts[] | "\(.id)\t\(.created_at)\t\(.name)"' \
+            | while IFS=$'\t' read -r ID CREATED NAME; do
+                C=$(date -u -d "$CREATED" +%s 2>/dev/null || echo "$NOW")
+                if [ $(( NOW - C )) -ge "$KEEP" ]; then
+                  echo "deleting artifact $NAME ($ID)"
+                  gh api -X DELETE "repos/$REPO/actions/artifacts/$ID" || true
+                fi
+              done
+            PAGE=$(( PAGE + 1 ))
+            [ "$PAGE" -gt 10 ] && break
+          done
+
+      - name: 用量汇总
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          echo "### 存储用量" >> "$GITHUB_STEP_SUMMARY"
+          gh api "repos/$REPO/actions/artifacts?per_page=100" \
+            --jq '[.artifacts[].size_in_bytes] | add // 0 | "artifacts 合计: \(. / 1048576 | floor) MB"' \
+            >> "$GITHUB_STEP_SUMMARY" || true
