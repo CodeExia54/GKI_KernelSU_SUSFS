@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kernel Build Console</title>
+<style>
+  :root{
+    --bg:#0d1117; --panel:#161b22; --panel2:#1c2330; --border:#2a3441;
+    --fg:#e6edf3; --muted:#8b949e; --accent:#2ea44f; --accent2:#1f6feb;
+    --warn:#d29922; --err:#f85149; --ok:#3fb950; --chip:#21262d;
+    --radius:12px; --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  }
+  @media (prefers-color-scheme:light){
+    :root{--bg:#f6f8fa;--panel:#fff;--panel2:#f0f3f6;--border:#d0d7de;
+      --fg:#1f2328;--muted:#59636e;--chip:#eaeef2;}
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--sans);font-size:14px;line-height:1.5}
+  a{color:var(--accent2);text-decoration:none}
+  a:hover{text-decoration:underline}
+  .wrap{max-width:1000px;margin:0 auto;padding:20px 16px 60px}
+  header{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:6px}
+  header h1{font-size:20px;margin:0;font-weight:650;letter-spacing:-.2px}
+  .sub{color:var(--muted);font-size:12.5px;margin-bottom:18px}
+  .grid{display:grid;gap:16px}
+  @media(min-width:760px){.grid.cols2{grid-template-columns:1fr 1fr}}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:16px}
+  .card h2{font-size:14px;margin:0 0 12px;font-weight:650;display:flex;align-items:center;gap:8px}
+  .card h2 .dot{width:8px;height:8px;border-radius:50%;background:var(--accent)}
+  label{display:block;font-size:12px;color:var(--muted);margin:10px 0 4px;font-weight:550}
+  select,input[type=text],input[type=password]{width:100%;padding:8px 10px;background:var(--panel2);
+    color:var(--fg);border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:var(--sans)}
+  input:focus,select:focus{outline:none;border-color:var(--accent2)}
+  .row{display:flex;gap:10px;flex-wrap:wrap}
+  .row>div{flex:1;min-width:130px}
+  .toggles{display:grid;grid-template-columns:1fr 1fr;gap:6px 14px;margin-top:8px}
+  .tg{display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--fg)}
+  .tg input{width:auto}
+  button{cursor:pointer;font-family:var(--sans)}
+  .btn{background:var(--accent);color:#fff;border:none;border-radius:8px;padding:10px 16px;
+    font-size:13.5px;font-weight:600;width:100%;margin-top:14px;transition:filter .15s}
+  .btn:hover{filter:brightness(1.08)}
+  .btn:disabled{opacity:.5;cursor:not-allowed}
+  .btn.alt{background:var(--accent2)}
+  .btn.ghost{background:transparent;border:1px solid var(--border);color:var(--fg);width:auto;padding:6px 12px;margin:0;font-size:12px;font-weight:550}
+  .chip{display:inline-flex;align-items:center;gap:6px;background:var(--chip);border:1px solid var(--border);
+    border-radius:20px;padding:3px 10px;font-size:11.5px;color:var(--muted)}
+  .chip b{color:var(--fg);font-weight:600}
+  .device{background:linear-gradient(135deg,rgba(46,164,79,.14),rgba(31,111,235,.12));
+    border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;margin-bottom:16px;
+    display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+  .mono{font-family:var(--mono);font-size:12px}
+  .muted{color:var(--muted)}
+  .log{font-family:var(--mono);font-size:11.5px;background:var(--panel2);border:1px solid var(--border);
+    border-radius:8px;padding:10px;max-height:160px;overflow:auto;white-space:pre-wrap;margin-top:12px}
+  .list{display:flex;flex-direction:column;gap:8px;margin-top:4px}
+  .item{display:flex;align-items:center;gap:10px;padding:9px 11px;background:var(--panel2);
+    border:1px solid var(--border);border-radius:9px;font-size:12.5px}
+  .item .st{width:9px;height:9px;border-radius:50%;flex:none}
+  .st.ok{background:var(--ok)} .st.run{background:var(--warn);animation:pulse 1.2s infinite}
+  .st.fail{background:var(--err)} .st.idle{background:var(--muted)}
+  @keyframes pulse{50%{opacity:.35}}
+  .item .grow{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .ver{display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--border);font-size:12.5px}
+  .ver:last-child{border-bottom:none}
+  .ver .tag{font-family:var(--mono);font-size:11.5px;background:var(--chip);padding:2px 7px;border-radius:6px}
+  details summary{cursor:pointer;color:var(--muted);font-size:12px;margin-top:6px}
+  .banner{font-size:12px;padding:9px 12px;border-radius:8px;margin-top:10px;display:none}
+  .banner.err{background:rgba(248,81,73,.12);border:1px solid var(--err);color:var(--err);display:block}
+  .banner.ok{background:rgba(63,185,80,.12);border:1px solid var(--ok);color:var(--ok);display:block}
+  .foot{color:var(--muted);font-size:11.5px;margin-top:24px;text-align:center}
+  code{font-family:var(--mono);background:var(--chip);padding:1px 5px;border-radius:5px;font-size:12px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>🛠️ Kernel Build Console</h1>
+    <span class="chip"><b id="repoChip">CodeExia54/GKI_KernelSU_SUSFS</b></span>
+    <span class="chip">branch <b id="refChip">dev</b></span>
+  </header>
+  <div class="sub">Trigger GKI kernel &amp; LKM builds on your fork, and watch upstream root updates — all from one page.</div>
+
+  <div class="device" id="deviceBanner">
+    <span class="chip">📱 Target</span>
+    <span class="mono" id="devLine">android13 · 5.15 · arm64-v8a · ReSukiSU</span>
+    <span class="muted" style="font-size:11.5px">defaults preselected for your device</span>
+  </div>
+
+  <!-- SETTINGS -->
+  <div class="card" style="margin-bottom:16px">
+    <h2><span class="dot" style="background:var(--accent2)"></span> Connection</h2>
+    <div class="row">
+      <div>
+        <label>Repository (owner/name)</label>
+        <input type="text" id="repo" value="CodeExia54/GKI_KernelSU_SUSFS">
+      </div>
+      <div>
+        <label>Branch (workflow ref)</label>
+        <input type="text" id="ref" value="dev">
+      </div>
+    </div>
+    <label>GitHub token — fine-grained PAT with <b>Actions: Read&amp;Write</b> on this repo (stored only in this browser)</label>
+    <input type="password" id="pat" placeholder="github_pat_… or ghp_…" autocomplete="off">
+    <div class="row" style="margin-top:10px">
+      <button class="btn ghost" id="saveTok">Save token</button>
+      <button class="btn ghost" id="testTok">Test access</button>
+      <button class="btn ghost" id="clearTok">Clear</button>
+      <a class="btn ghost" href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">Create a PAT ↗</a>
+    </div>
+    <div class="banner" id="tokMsg"></div>
+  </div>
+
+  <div class="grid cols2">
+    <!-- FULL KERNEL -->
+    <div class="card">
+      <h2><span class="dot"></span> Full Kernel Build <span class="muted" style="font-weight:400;font-size:11.5px">→ kernel-custom.yml</span></h2>
+      <div class="row">
+        <div>
+          <label>Kernel (KMI)</label>
+          <select id="k_kernel"></select>
+        </div>
+        <div>
+          <label>Security patch / sub-version</label>
+          <select id="k_patch"></select>
+        </div>
+      </div>
+      <div class="row">
+        <div>
+          <label>Root variant</label>
+          <select id="k_variant">
+            <option>ReSukiSU</option><option>SukiSU</option>
+            <option>SukiSU(40726)</option><option>SukiSU(40548)</option><option>Official</option>
+          </select>
+        </div>
+        <div>
+          <label>KPM</label>
+          <select id="k_kpm">
+            <option value="disabled (关闭)">disabled</option>
+            <option value="enabled (开启)">enabled</option>
+          </select>
+        </div>
+      </div>
+      <label>Artifact output</label>
+      <select id="k_upload">
+        <option value="仅上传 AnyKernel3.zip">AnyKernel3.zip only</option>
+        <option value="上传全部">Everything (boot img + zip)</option>
+      </select>
+      <div class="toggles">
+        <label class="tg"><input type="checkbox" id="t_susfs" checked> SUSFS</label>
+        <label class="tg"><input type="checkbox" id="t_zram"> ZRAM (LZ4)</label>
+        <label class="tg"><input type="checkbox" id="t_bbg"> BBG anti-brick</label>
+        <label class="tg"><input type="checkbox" id="t_rekernel"> Re-Kernel</label>
+        <label class="tg"><input type="checkbox" id="t_cve"> CVE-2026-43499 fix</label>
+        <label class="tg"><input type="checkbox" id="t_supp"> OnePlus 8E</label>
+      </div>
+      <button class="btn" id="runKernel">🚀 Start kernel build</button>
+      <div class="banner" id="kMsg"></div>
+    </div>
+
+    <!-- LKM -->
+    <div class="card">
+      <h2><span class="dot" style="background:var(--accent2)"></span> LKM Build (kernelsu.ko) <span class="muted" style="font-weight:400;font-size:11.5px">→ kernel-lkm.yml</span></h2>
+      <div class="row">
+        <div>
+          <label>Root variant (LKM source)</label>
+          <select id="l_variant">
+            <option>ReSukiSU</option><option>SukiSU-Ultra</option>
+            <option>KernelSU</option><option>KernelSU-Next</option>
+          </select>
+        </div>
+        <div>
+          <label>KMI</label>
+          <select id="l_kmi">
+            <option>android12-5.10</option><option>android13-5.10</option>
+            <option selected>android13-5.15</option><option>android14-5.15</option>
+            <option>android14-6.1</option><option>android15-6.6</option>
+            <option>android16-6.12</option><option>android17-6.18</option>
+          </select>
+        </div>
+      </div>
+      <label>Architecture</label>
+      <select id="l_arch"><option>arm64</option><option>x86_64</option><option>both</option></select>
+      <p class="muted" style="font-size:11.5px;margin:12px 0 0">Produces <code>&lt;kmi&gt;_kernelsu.ko</code> as a run artifact — flash-free root via boot.img patch in the manager.</p>
+      <button class="btn alt" id="runLkm">🧩 Build kernelsu.ko</button>
+      <div class="banner" id="lMsg"></div>
+    </div>
+  </div>
+
+  <div class="grid cols2" style="margin-top:16px">
+    <!-- UPSTREAM VERSIONS -->
+    <div class="card">
+      <h2><span class="dot" style="background:var(--warn)"></span> Upstream root updates
+        <button class="btn ghost" id="refreshVer" style="margin-left:auto">↻</button>
+      </h2>
+      <div id="versions"><div class="muted" style="font-size:12px">Loading…</div></div>
+    </div>
+
+    <!-- RECENT RUNS -->
+    <div class="card">
+      <h2><span class="dot" style="background:var(--ok)"></span> Recent runs
+        <button class="btn ghost" id="refreshRuns" style="margin-left:auto">↻</button>
+      </h2>
+      <div class="list" id="runs"><div class="muted" style="font-size:12px">Add a token, then refresh.</div></div>
+    </div>
+  </div>
+
+  <div class="foot">
+    Runs entirely in your browser · token never leaves this device · calls the GitHub REST API directly.<br>
+    <span id="pagesHint"></span>
+  </div>
+</div>
+
+<script>
+const $ = s => document.querySelector(s);
+const API = 'https://api.github.com';
+const VARIANT_REPO = {
+  'ReSukiSU':'ReSukiSU/ReSukiSU','SukiSU-Ultra':'SukiSU-Ultra/SukiSU-Ultra',
+  'KernelSU':'tiann/KernelSU','KernelSU-Next':'KernelSU-Next/KernelSU-Next'
+};
+const KMI = ['android12-5.10','android13-5.10','android13-5.15','android14-5.15',
+  'android14-6.1','android15-6.6','android16-6.12','android17-6.18'];
+// kernel_version -> android for custom workflow + data file path
+const KVER = {'5.10':'android12','5.15':'android13','6.1':'android14','6.6':'android15','6.12':'android16'};
+
+const store = {
+  get:k=>{try{return localStorage.getItem(k)}catch(e){return null}},
+  set:(k,v)=>{try{localStorage.setItem(k,v)}catch(e){}},
+  del:k=>{try{localStorage.removeItem(k)}catch(e){}}
+};
+function tok(){return ($('#pat').value||'').trim()}
+function repo(){return ($('#repo').value||'').trim()}
+function ref(){return ($('#ref').value||'dev').trim()}
+function hdr(auth){const h={'Accept':'application/vnd.github+json','X-GitHub-Api-Version':'2022-11-28'};
+  if(auth&&tok())h['Authorization']='Bearer '+tok();return h;}
+function banner(el,msg,cls){el.className='banner '+cls;el.textContent=msg;}
+
+// ---- restore saved ----
+(function(){
+  const t=store.get('gh_pat'); if(t)$('#pat').value=t;
+  const r=store.get('gh_repo'); if(r)$('#repo').value=r;
+  const b=store.get('gh_ref'); if(b)$('#ref').value=b;
+  syncChips();
+})();
+function syncChips(){$('#repoChip').textContent=repo();$('#refChip').textContent=ref();
+  const [o,n]=repo().split('/');
+  $('#pagesHint').innerHTML = o&&n ? `Live at <code>https://${o.toLowerCase()}.github.io/${n}/console.html</code> once Pages is enabled.` : '';}
+['repo','ref'].forEach(id=>$('#'+id).addEventListener('input',()=>{
+  store.set('gh_repo',repo());store.set('gh_ref',ref());syncChips();}));
+
+$('#saveTok').onclick=()=>{store.set('gh_pat',tok());banner($('#tokMsg'),'Token saved in this browser.','ok');};
+$('#clearTok').onclick=()=>{store.del('gh_pat');$('#pat').value='';banner($('#tokMsg'),'Token cleared.','ok');};
+$('#testTok').onclick=async()=>{
+  if(!tok())return banner($('#tokMsg'),'Enter a token first.','err');
+  try{
+    const r=await fetch(`${API}/repos/${repo()}`,{headers:hdr(true)});
+    if(!r.ok)throw new Error(r.status+' '+r.statusText);
+    const j=await r.json();
+    banner($('#tokMsg'),`✓ Access OK — ${j.full_name} (${j.permissions&&j.permissions.push?'write':'read-only'})`,
+      (j.permissions&&j.permissions.push)?'ok':'err');
+    loadRuns();
+  }catch(e){banner($('#tokMsg'),'✗ '+e.message+' — check token scope (Actions R/W) & repo name.','err');}
+};
+
+// ---- populate kernel/patch dropdowns from data/*.json ----
+async function loadKernels(){
+  const sel=$('#k_kernel'); sel.innerHTML='';
+  Object.keys(KVER).forEach(kv=>{const o=document.createElement('option');o.value=kv;o.textContent=`${KVER[kv]} · ${kv}`;sel.appendChild(o);});
+  sel.value='5.15'; // device default
+  sel.onchange=loadPatches;
+  await loadPatches();
+}
+async function loadPatches(){
+  const kv=$('#k_kernel').value, sel=$('#k_patch'); sel.innerHTML='<option>lts</option>';
+  const [o,n]=repo().split('/'); const rf=ref();
+  try{
+    const url=`https://raw.githubusercontent.com/${o}/${n}/${rf}/data/${KVER[kv]}/${kv}.json`;
+    const r=await fetch(url); if(!r.ok)throw 0; const j=await r.json();
+    (j.entries||[]).slice().reverse().forEach(e=>{
+      const op=document.createElement('option');op.value=e.date;op.textContent=`${e.date}  →  ${e.kernel}`;sel.appendChild(op);});
+    if(j.lts){sel.querySelector('option').textContent=`lts  →  ${j.lts} (latest)`;}
+  }catch(e){/* keep lts only */}
+  sel.value='lts';
+}
+
+// ---- dispatch ----
+async function dispatch(wf,inputs,msgEl,btn){
+  if(!tok())return banner(msgEl,'Add & save a GitHub token first (Connection panel).','err');
+  btn.disabled=true; banner(msgEl,'Dispatching…','ok');
+  try{
+    const r=await fetch(`${API}/repos/${repo()}/actions/workflows/${wf}/dispatches`,{
+      method:'POST',headers:hdr(true),body:JSON.stringify({ref:ref(),inputs})});
+    if(r.status===204){banner(msgEl,'✓ Build queued! Check "Recent runs" in a few seconds.','ok');
+      setTimeout(loadRuns,3500);}
+    else{const t=await r.text();throw new Error(r.status+' — '+t);}
+  }catch(e){banner(msgEl,'✗ '+e.message,'err');}
+  finally{btn.disabled=false;}
+}
+
+$('#runKernel').onclick=()=>dispatch('kernel-custom.yml',{
+  kernel_version:$('#k_kernel').value,
+  os_patch_level:$('#k_patch').value,
+  kernelsu_variant:$('#k_variant').value,
+  use_kpm:$('#k_kpm').value,
+  artifact_upload_mode:$('#k_upload').value,
+  droidspaces:'off', droidspaces_ntsync:false,
+  use_zram:$('#t_zram').checked, use_bbg:$('#t_bbg').checked,
+  use_rekernel:$('#t_rekernel').checked, cve_2026_43499_patch:$('#t_cve').checked,
+  cancel_susfs:!$('#t_susfs').checked, supp_op:$('#t_supp').checked
+},$('#kMsg'),$('#runKernel'));
+
+$('#runLkm').onclick=()=>dispatch('kernel-lkm.yml',{
+  variant:$('#l_variant').value, kmi:$('#l_kmi').value, arch:$('#l_arch').value
+},$('#lMsg'),$('#runLkm'));
+
+// ---- upstream versions ----
+async function loadVersions(){
+  const box=$('#versions'); box.innerHTML='';
+  for(const [name,rp] of Object.entries(VARIANT_REPO)){
+    const row=document.createElement('div'); row.className='ver';
+    row.innerHTML=`<span><a href="https://github.com/${rp}" target="_blank" rel="noopener">${name}</a></span><span class="tag muted">…</span>`;
+    box.appendChild(row);
+    (async()=>{
+      try{
+        let tag='—',when='';
+        let r=await fetch(`${API}/repos/${rp}/releases/latest`,{headers:hdr(true)});
+        if(r.ok){const j=await r.json();tag=j.tag_name;when=(j.published_at||'').slice(0,10);}
+        else{ // no releases -> latest commit on default branch
+          const c=await fetch(`${API}/repos/${rp}/commits?per_page=1`,{headers:hdr(true)});
+          if(c.ok){const a=await c.json();tag=a[0].sha.slice(0,7);when=(a[0].commit.author.date||'').slice(0,10);}
+        }
+        row.querySelector('.tag').classList.remove('muted');
+        row.querySelector('.tag').textContent=tag+(when?'  · '+when:'');
+      }catch(e){row.querySelector('.tag').textContent='n/a';}
+    })();
+  }
+}
+
+// ---- recent runs ----
+async function loadRuns(){
+  const box=$('#runs');
+  if(!tok()){box.innerHTML='<div class="muted" style="font-size:12px">Add a token, then refresh.</div>';return;}
+  box.innerHTML='<div class="muted" style="font-size:12px">Loading…</div>';
+  try{
+    const r=await fetch(`${API}/repos/${repo()}/actions/runs?per_page=8`,{headers:hdr(true)});
+    if(!r.ok)throw new Error(r.status+' '+r.statusText);
+    const j=await r.json(); box.innerHTML='';
+    if(!j.workflow_runs.length){box.innerHTML='<div class="muted" style="font-size:12px">No runs yet.</div>';return;}
+    j.workflow_runs.forEach(run=>{
+      const cls = run.status!=='completed' ? 'run' : (run.conclusion==='success'?'ok':(run.conclusion==='failure'?'fail':'idle'));
+      const state = run.status!=='completed' ? run.status : run.conclusion;
+      const el=document.createElement('div'); el.className='item';
+      el.innerHTML=`<span class="st ${cls}"></span>
+        <span class="grow"><b>${run.name}</b><br><span class="muted mono" style="font-size:11px">${state} · ${(run.created_at||'').slice(0,16).replace('T',' ')}</span></span>
+        <a href="${run.html_url}" target="_blank" rel="noopener" class="chip">open ↗</a>`;
+      box.appendChild(el);
+    });
+  }catch(e){box.innerHTML=`<div class="banner err" style="display:block">${e.message}</div>`;}
+}
+
+$('#refreshVer').onclick=loadVersions;
+$('#refreshRuns').onclick=loadRuns;
+
+// init
+loadKernels(); loadVersions(); if(tok())loadRuns();
+</script>
+</body>
+</html>

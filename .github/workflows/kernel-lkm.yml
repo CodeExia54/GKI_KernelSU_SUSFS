@@ -1,0 +1,163 @@
+# ========================================
+# KernelSU LKM (kernelsu.ko) 构建
+# ========================================
+# 使用 ylarod 的 ddk-min 容器，把所选 root 变体的 kernel/ 模块目录
+# 以 CONFIG_KSU=m 方式编译成可加载内核模块 kernelsu.ko。
+# 产物：<kmi>_kernelsu.ko 作为 Actions artifact 上传。
+# 参考：ReSukiSU/ReSukiSU 的 build-lkm.yml + ddk-lkm.yml。
+# ========================================
+
+name: 构建 LKM (kernelsu.ko)
+
+permissions:
+  contents: read
+
+on:
+  workflow_dispatch:
+    inputs:
+      variant:
+        description: "Root 变体 (LKM 源)"
+        type: choice
+        default: ReSukiSU
+        options:
+          - ReSukiSU
+          - SukiSU-Ultra
+          - KernelSU
+          - KernelSU-Next
+      kmi:
+        description: "KMI 版本 (android版本-内核版本)"
+        type: choice
+        default: android13-5.15
+        options:
+          - android12-5.10
+          - android13-5.10
+          - android13-5.15
+          - android14-5.15
+          - android14-6.1
+          - android15-6.6
+          - android16-6.12
+          - android17-6.18
+      arch:
+        description: "目标架构"
+        type: choice
+        default: arm64
+        options:
+          - arm64
+          - x86_64
+          - both
+      ddk_release:
+        description: "DDK 容器版本 (ghcr.io/ylarod/ddk-min 标签日期)"
+        type: string
+        default: "20260828"
+
+jobs:
+  build-lkm:
+    name: "kernelsu.ko · ${{ inputs.variant }} · ${{ inputs.kmi }} · ${{ inputs.arch }}"
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/ylarod/ddk-min:${{ inputs.kmi }}-${{ inputs.ddk_release }}
+      options: --privileged
+
+    steps:
+      - name: 解析变体源仓库
+        id: src
+        run: |
+          case "${{ inputs.variant }}" in
+            "ReSukiSU")       REPO="ReSukiSU/ReSukiSU"; REF="main" ;;
+            "SukiSU-Ultra")   REPO="SukiSU-Ultra/SukiSU-Ultra"; REF="main" ;;
+            "KernelSU")       REPO="tiann/KernelSU"; REF="main" ;;
+            "KernelSU-Next")  REPO="KernelSU-Next/KernelSU-Next"; REF="next" ;;
+            *) echo "未知变体"; exit 1 ;;
+          esac
+          echo "repo=$REPO" >> "$GITHUB_OUTPUT"
+          echo "ref=$REF"   >> "$GITHUB_OUTPUT"
+          echo "选择变体: ${{ inputs.variant }} -> $REPO@$REF"
+
+      - name: 检出变体源码
+        uses: actions/checkout@v7
+        with:
+          repository: ${{ steps.src.outputs.repo }}
+          ref: ${{ steps.src.outputs.ref }}
+
+      - name: 允许 git 安全目录
+        run: git config --global --add safe.directory '*'
+
+      - name: 定位模块目录
+        id: mod
+        run: |
+          # KernelSU 系列模块 Makefile 均位于 kernel/ ；个别布局兜底探测
+          for d in kernel kernel/kernelsu .; do
+            if [ -f "$d/Makefile" ] && grep -qiE "kernelsu|CONFIG_KSU" "$d/Makefile" 2>/dev/null; then
+              echo "dir=$d" >> "$GITHUB_OUTPUT"; echo "模块目录: $d"; exit 0
+            fi
+          done
+          # 默认回退到 kernel/
+          echo "dir=kernel" >> "$GITHUB_OUTPUT"
+          echo "未精确匹配，回退到 kernel/"
+
+      - name: 编译 kernelsu.ko (arm64)
+        if: ${{ inputs.arch == 'arm64' || inputs.arch == 'both' }}
+        run: |
+          set -ex
+          cd "${{ steps.mod.outputs.dir }}"
+          CONFIG_KSU=m CONFIG_KSU_MULTI_MANAGER_SUPPORT=y CONFIG_KSU_TRACEPOINT_HOOK=y CC=clang make
+          OUT_DIR=/github/workspace/out/aarch64
+          mkdir -p "$OUT_DIR"
+          cp kernelsu.ko "$OUT_DIR/${{ inputs.kmi }}_kernelsu.ko"
+          llvm-strip -d "$OUT_DIR/${{ inputs.kmi }}_kernelsu.ko" || true
+          ls -la "$OUT_DIR"
+          modinfo "$OUT_DIR/${{ inputs.kmi }}_kernelsu.ko" 2>/dev/null || true
+
+      - name: 上传 arm64 artifact
+        if: ${{ inputs.arch == 'arm64' || inputs.arch == 'both' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: aarch64-${{ inputs.kmi }}-lkm
+          path: /github/workspace/out/aarch64/${{ inputs.kmi }}_kernelsu.ko
+          if-no-files-found: error
+
+      - name: 编译 kernelsu.ko (x86_64)
+        if: ${{ inputs.arch == 'x86_64' || inputs.arch == 'both' }}
+        run: |
+          set -ex
+          MDIR="$(realpath "${{ steps.mod.outputs.dir }}")"
+          mkdir -p /opt/ddk/kdir-x64
+          unset ARCH CROSS_COMPILE
+          export ARCH=x86_64
+          kmi="${{ inputs.kmi }}"
+          pushd "/opt/ddk/src/$kmi"
+          export KDIR="/opt/ddk/kdir-x64/$kmi"
+
+          # ddk-min x86 kdir 的 modpost 补丁需幂等应用
+          MODPOST=scripts/mod/modpost.c
+          sed -i -E 's/^([[:space:]]*)check_exports\(mod\);/\1\/\/ check_exports(mod);/' "$MODPOST" || true
+          sed -i -E 's/^([[:space:]]*)s->module = exp->module;/\1\/\/ s->module = exp->module;/' "$MODPOST" || true
+          sed -i 's/^static void check_exports(/static void __attribute__((unused)) check_exports(/' "$MODPOST" || true
+
+          make O="$KDIR" gki_defconfig
+          scripts/config --file "$KDIR/.config" -d LTO_CLANG -e LTO_NONE -d LTO_CLANG_THIN -d LTO_CLANG_FULL -d THINLTO
+          if [ "$kmi" = "android16-6.12" ] || [ "$kmi" = "android17-6.18" ]; then
+            scripts/config --file "$KDIR/.config" -e CONFIG_CFI_ICALL_NORMALIZE_INTEGERS
+          fi
+          make O="$KDIR" modules_prepare
+          make O="$KDIR" security/selinux/built-in.a
+          popd
+
+          EXTRA=""
+          if [ "$kmi" = "android17-6.18" ]; then EXTRA="CONFIG_KSU_X86_PATCH_SYSCALL_DISPATCHER=y"; fi
+          make -C "$KDIR" M="$MDIR" src="$MDIR" modules \
+            CONFIG_KSU=m CONFIG_KSU_MULTI_MANAGER_SUPPORT=y CONFIG_KSU_TRACEPOINT_HOOK=y $EXTRA
+
+          OUT_DIR=/github/workspace/out/x86_64
+          mkdir -p "$OUT_DIR"
+          cp "$MDIR/kernelsu.ko" "$OUT_DIR/${{ inputs.kmi }}_kernelsu.ko"
+          llvm-strip -d "$OUT_DIR/${{ inputs.kmi }}_kernelsu.ko" || true
+          ls -la "$OUT_DIR"
+
+      - name: 上传 x86_64 artifact
+        if: ${{ inputs.arch == 'x86_64' || inputs.arch == 'both' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: x86_64-${{ inputs.kmi }}-lkm
+          path: /github/workspace/out/x86_64/${{ inputs.kmi }}_kernelsu.ko
+          if-no-files-found: error
