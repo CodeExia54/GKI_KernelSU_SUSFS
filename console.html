@@ -205,9 +205,12 @@
         <option value="上传全部">Everything (boot img + zip)</option>
       </select>
       <div class="row">
-        <div>
-          <label>Custom version name (optional)</label>
-          <input type="text" id="k_version" placeholder="e.g. CodeExia-ROG6">
+        <div style="flex:2">
+          <label>Custom kernel string / LOCALVERSION (optional)
+            <span class="muted" style="font-weight:400"> — paste your full <code>uname -r</code>; the version number is auto-stripped</span>
+          </label>
+          <input type="text" id="k_version" placeholder="5.15.206-android13-8-00056-g3f87b8704e9e-ab15683575">
+          <button type="button" class="btn ghost" id="fillUname" style="margin-top:6px">Use my device string</button>
         </div>
         <div>
           <label>Custom build time (optional)</label>
@@ -468,6 +471,8 @@ function kernelInputs(){return {
   use_rekernel:$('#t_rekernel').checked, cve_2026_43499_patch:$('#t_cve').checked,
   cancel_susfs:!$('#t_susfs').checked, supp_op:$('#t_supp').checked
 };}
+const DEVICE_UNAME='5.15.206-android13-8-00056-g3f87b8704e9e-ab15683575';
+$('#fillUname').onclick=()=>{$('#k_version').value=DEVICE_UNAME;};
 $('#runKernel').onclick=()=>dispatch('kernel-custom.yml',kernelInputs(),$('#kMsg'),$('#runKernel'));
 $('#runLkm').onclick=()=>dispatch('kernel-lkm.yml',{
   variant:$('#l_variant').value, kmi:$('#l_kmi').value, arch:$('#l_arch').value
