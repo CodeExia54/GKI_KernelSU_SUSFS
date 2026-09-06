@@ -421,10 +421,21 @@ jobs:
               BRANCH="-s main"
               ;;
             "SukiSU")
-              if [ "${{ inputs.enable_susfs }}" = "false" ]; then
-                BRANCH="-s main"
+              # 用 SukiSU-Ultra 的最新“发行版/预发行版”作为构建源：发行版带有成功
+              # 构建的产物(assets)，即被上游证明可用 —— 优先带产物的预发行版，其次
+              # 最新带产物的正式发行版。这样避免了滚动 builtin 分支的破坏性 HEAD，
+              # 也避免 builtin(内置 SUSFS) 与本流程 SUSFS 补丁重复打补丁产生的 .rej 冲突
+              # (改用发行版 tag + 常规 SUSFS 补丁，与 ReSukiSU 路径一致)。
+              REL_JSON=$(curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+                "https://api.github.com/repos/SukiSU-Ultra/SukiSU-Ultra/releases?per_page=15")
+              SUKISU_REL=$(printf '%s' "$REL_JSON" | jq -r \
+                'map(select((.assets|length)>0)) | ((map(select(.prerelease))|first) // first) | .tag_name // empty')
+              if [ -n "$SUKISU_REL" ]; then
+                BRANCH="-s $SUKISU_REL"
+                echo "SukiSU 使用最新发行版(带产物): $SUKISU_REL"
               else
-                BRANCH="-s builtin"
+                echo "未解析到 SukiSU 发行版，回退到 main"
+                BRANCH="-s main"
               fi
               ;;
             "Next")
