@@ -328,6 +328,17 @@
     <div id="pResult" hidden style="margin-top:12px"></div>
   </div>
 
+  <!-- MANAGER APKs -->
+  <div class="card" style="margin-top:16px">
+    <h2><span class="dot" style="background:var(--accent2)"></span> Manager APKs <span class="muted" style="font-weight:400;font-size:11.5px">normal + spoofed — every build ships both</span>
+      <button class="btn ghost" id="refreshMgr" style="margin-left:auto">↻</button>
+    </h2>
+    <p class="muted" style="font-size:11.5px;margin:0 0 10px">
+      The <b>spoofed</b> manager has a randomized package name/icon to hide from apps that detect the KernelSU manager. Each kernel build's <code>…-Manager</code> artifact contains both the normal and spoofed arm64 APKs.
+    </p>
+    <div class="list" id="managers"><div class="muted" style="font-size:12px">Add a token &amp; refresh, or open the latest run's artifacts.</div></div>
+  </div>
+
   <div class="grid cols2" style="margin-top:16px">
     <!-- UPSTREAM VERSIONS -->
     <div class="card">
@@ -606,6 +617,30 @@ async function loadRuns(){
 $('#refreshVer').onclick=loadVersions;
 $('#refreshRuns').onclick=loadRuns;
 
+// ---- manager APKs (normal + spoofed) ----
+async function loadManagers(){
+  const box=$('#managers');
+  if(!tok()){box.innerHTML='<div class="muted" style="font-size:12px">Add a token &amp; refresh to list the latest Manager artifact (normal + spoofed).</div>';return;}
+  box.innerHTML='<div class="muted" style="font-size:12px">Loading…</div>';
+  try{
+    const runs=await gh(`/repos/${repo()}/actions/runs?per_page=25`);
+    let found=null;
+    for(const run of runs.workflow_runs){
+      const a=await gh(`/repos/${repo()}/actions/runs/${run.id}/artifacts`);
+      const m=(a.artifacts||[]).find(x=>/manager/i.test(x.name)&&!x.expired);
+      if(m){found={run,art:m};break;}
+    }
+    if(!found){box.innerHTML='<div class="muted" style="font-size:12px">No Manager artifact yet — run a build first.</div>';return;}
+    const {run,art}=found;
+    box.innerHTML=`
+      <div class="item"><span class="st idle"></span>
+        <span class="grow"><b>${art.name}</b><br><span class="muted mono" style="font-size:11px">contains normal + spoofed arm64 APK · from run ${run.id}</span></span>
+        <a class="chip" target="_blank" rel="noopener" href="${run.html_url}">download ↗</a></div>
+      <p class="muted" style="font-size:11px;margin:8px 2px 0">Open the run → <b>Artifacts</b> → <b>${art.name}</b> (a zip with <code>Manager-release/…-arm64-v8a-release.apk</code> and <code>Spoofed-Manager-release/…-spoofed…arm64-v8a-release.apk</code>). Install the <b>spoofed</b> one to stay hidden.</p>`;
+  }catch(e){box.innerHTML=`<div class="banner err" style="display:block">${e.message}</div>`;}
+}
+$('#refreshMgr').onclick=loadManagers;
+
 // ---- boot patcher ----
 let patchFile=null;
 $('#p_fileLabel').onclick=()=>$('#p_file').click();
@@ -667,7 +702,7 @@ $('#runPatch').onclick=async()=>{
 };
 
 // init
-loadKernels(); loadVersions(); if(tok())loadRuns();
+loadKernels(); loadVersions(); if(tok()){loadRuns();loadManagers();}
 </script>
 </body>
 </html>
