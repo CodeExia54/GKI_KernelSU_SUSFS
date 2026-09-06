@@ -128,7 +128,7 @@
     <div class="spacer"></div>
     <span class="chip"><b id="repoChip">CodeExia54/GKI_KernelSU_SUSFS</b></span>
     <span class="chip">branch <b id="refChip">dev</b></span>
-    <button class="theme-btn" id="themeBtn" title="Toggle theme">◐</button>
+    <button class="theme-btn" id="themeBtn" title="Toggle theme">🌙</button>
   </div>
 </div>
 <div class="wrap">
@@ -431,7 +431,7 @@ async function loadPatches(){
     (j.entries||[]).slice().reverse().forEach(e=>{
       const st=depOf(kv,e.date);
       const op=document.createElement('option');op.value=e.date;
-      op.textContent=`${e.date}  →  ${e.kernel}`+(st==='deprecated'?' — deprecated':(st==='active'?'   ✓':''));
+      op.textContent=`${e.date}  →  ${e.kernel}`+(st==='deprecated'?'   ⚠ deprecated':(st==='active'?'   ✓':''));
       if(st==='deprecated')op.style.color='var(--warn)';
       sel.appendChild(op);});
     if(j.lts){sel.querySelector('option').textContent=`lts  →  ${j.lts} (latest, recommended)`;}
@@ -497,7 +497,7 @@ async function loadMPatches(){
       if(j.lts)sel.querySelector('option').textContent=`lts → ${j.lts} (latest)`;
       j.entries.slice().reverse().forEach(e=>{const st=depOf(kv,e.date);
         const op=document.createElement('option');op.value=e.date;
-        op.textContent=`${e.date} → ${e.kernel}`+(st==='deprecated'?' — deprecated':(st==='active'?'  ✓':''));
+        op.textContent=`${e.date} → ${e.kernel}`+(st==='deprecated'?'   ⚠ deprecated':(st==='active'?'  ✓':''));
         if(st==='deprecated')op.style.color='var(--warn)'; sel.appendChild(op);});
     }
   }catch(e){}
@@ -551,7 +551,7 @@ $('#runMulti').onclick=async()=>{
   if(saved){document.documentElement.setAttribute('data-theme',saved);}
   function cur(){return document.documentElement.getAttribute('data-theme')
     || (matchMedia('(prefers-color-scheme: light)').matches?'light':'dark');}
-  function paint(){$('#themeBtn').textContent = cur()==='light'?'◑':'◐';}
+  function paint(){$('#themeBtn').textContent = cur()==='light'?'☀️':'🌙';}
   paint();
   $('#themeBtn').onclick=()=>{const next=cur()==='light'?'dark':'light';
     document.documentElement.setAttribute('data-theme',next);store.set('gh_theme',next);paint();};
