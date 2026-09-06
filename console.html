@@ -123,20 +123,19 @@
 <div class="topbar">
   <div class="inner">
     <div class="brand">
-      <div class="logo">🛠️</div>
       <div><h1>Kernel Build Console</h1><div class="tagline">GKI · KernelSU · SUSFS — build, patch &amp; track</div></div>
     </div>
     <div class="spacer"></div>
     <span class="chip"><b id="repoChip">CodeExia54/GKI_KernelSU_SUSFS</b></span>
     <span class="chip">branch <b id="refChip">dev</b></span>
-    <button class="theme-btn" id="themeBtn" title="Toggle theme">🌙</button>
+    <button class="theme-btn" id="themeBtn" title="Toggle theme">◐</button>
   </div>
 </div>
 <div class="wrap">
   <div class="sub">Launch kernel &amp; LKM builds on your fork, patch <code>init_boot.img</code>, and watch upstream root updates — all from one page.</div>
 
   <div class="device" id="deviceBanner">
-    <span class="chip">📱 Target</span>
+    <span class="chip">Target</span>
     <span class="mono" id="devLine">android13 · 5.15 · arm64-v8a · ReSukiSU</span>
     <span class="muted" style="font-size:11.5px">defaults preselected for your device</span>
   </div>
@@ -164,7 +163,7 @@
     </div>
     <div class="banner" id="tokMsg"></div>
     <p class="muted" style="font-size:11.5px;margin:10px 0 0">
-      💡 A token gives you <b>one-click builds</b> straight from this page (needs <b>Actions: R/W</b>; the patcher also needs <b>Contents: R/W</b>).
+      A token gives you <b>one-click builds</b> straight from this page (needs <b>Actions: R/W</b>; the patcher also needs <b>Contents: R/W</b>).
       Don't want a token? Use the <b>“Open in GitHub Actions (no token)”</b> link under each build — it opens the workflow's Run page where you just press <b>Run workflow</b> while logged in to GitHub. No token needed for that path.
     </p>
   </div>
@@ -225,7 +224,7 @@
         <label class="tg"><input type="checkbox" id="t_cve"> CVE-2026-43499 fix</label>
         <label class="tg"><input type="checkbox" id="t_supp"> OnePlus 8E</label>
       </div>
-      <button class="btn" id="runKernel">🚀 Start kernel build</button>
+      <button class="btn" id="runKernel">Start kernel build</button>
       <a class="btn ghost" id="openKernel" target="_blank" rel="noopener"
          style="display:inline-block;margin-top:8px;text-decoration:none">Open in GitHub Actions (no token) ↗</a>
       <div class="banner" id="kMsg"></div>
@@ -255,7 +254,7 @@
       <label>Architecture</label>
       <select id="l_arch"><option>arm64</option><option>x86_64</option><option>both</option></select>
       <p class="muted" style="font-size:11.5px;margin:12px 0 0">Produces <code>&lt;kmi&gt;_kernelsu.ko</code> as a run artifact — flash-free root via boot.img patch in the manager.</p>
-      <button class="btn alt" id="runLkm">🧩 Build kernelsu.ko</button>
+      <button class="btn alt" id="runLkm">Build kernelsu.ko</button>
       <a class="btn ghost" id="openLkm" target="_blank" rel="noopener"
          style="display:inline-block;margin-top:8px;text-decoration:none">Open in GitHub Actions (no token) ↗</a>
       <div class="banner" id="lMsg"></div>
@@ -282,11 +281,11 @@
         </select>
       </div>
     </div>
-    <button class="btn ghost" id="addQueue" style="margin-top:12px">➕ Add to queue</button>
+    <button class="btn ghost" id="addQueue" style="margin-top:12px">Add to queue</button>
     <label style="margin-top:14px">Build queue — <b id="qCount">0</b> item(s) <span class="muted" style="font-weight:400">(each fires its own build)</span></label>
     <div class="list" id="m_queue"><div class="muted" style="font-size:12px">Queue is empty. Add any KMI + sub-version combos above.</div></div>
     <div class="row" style="margin-top:10px">
-      <button class="btn" id="runMulti" style="flex:2">🚀 Build all queued (needs token)</button>
+      <button class="btn" id="runMulti" style="flex:2">Build all queued (needs token)</button>
       <button class="btn ghost" id="clearQueue" style="align-self:center">Clear</button>
       <a class="btn ghost" id="openMatrix" target="_blank" rel="noopener" style="text-decoration:none;align-self:center">full matrix ↗</a>
     </div>
@@ -322,21 +321,10 @@
         </select>
       </div>
     </div>
-    <button class="btn" id="runPatch" style="background:var(--warn);color:#1a1400">🩹 Upload &amp; patch</button>
+    <button class="btn" id="runPatch" style="background:var(--warn);color:#1a1400">Upload &amp; patch</button>
     <div class="banner" id="pMsg"></div>
     <div class="log" id="pLog" hidden></div>
     <div id="pResult" hidden style="margin-top:12px"></div>
-  </div>
-
-  <!-- MANAGER APKs -->
-  <div class="card" style="margin-top:16px">
-    <h2><span class="dot" style="background:var(--accent2)"></span> Manager APKs <span class="muted" style="font-weight:400;font-size:11.5px">normal + spoofed — every build ships both</span>
-      <button class="btn ghost" id="refreshMgr" style="margin-left:auto">↻</button>
-    </h2>
-    <p class="muted" style="font-size:11.5px;margin:0 0 10px">
-      The <b>spoofed</b> manager has a randomized package name/icon to hide from apps that detect the KernelSU manager. Each kernel build's <code>…-Manager</code> artifact contains both the normal and spoofed arm64 APKs.
-    </p>
-    <div class="list" id="managers"><div class="muted" style="font-size:12px">Add a token &amp; refresh, or open the latest run's artifacts.</div></div>
   </div>
 
   <div class="grid cols2" style="margin-top:16px">
@@ -443,7 +431,7 @@ async function loadPatches(){
     (j.entries||[]).slice().reverse().forEach(e=>{
       const st=depOf(kv,e.date);
       const op=document.createElement('option');op.value=e.date;
-      op.textContent=`${e.date}  →  ${e.kernel}`+(st==='deprecated'?'   ⚠ deprecated':(st==='active'?'   ✓':''));
+      op.textContent=`${e.date}  →  ${e.kernel}`+(st==='deprecated'?' — deprecated':(st==='active'?'   ✓':''));
       if(st==='deprecated')op.style.color='var(--warn)';
       sel.appendChild(op);});
     if(j.lts){sel.querySelector('option').textContent=`lts  →  ${j.lts} (latest, recommended)`;}
@@ -509,7 +497,7 @@ async function loadMPatches(){
       if(j.lts)sel.querySelector('option').textContent=`lts → ${j.lts} (latest)`;
       j.entries.slice().reverse().forEach(e=>{const st=depOf(kv,e.date);
         const op=document.createElement('option');op.value=e.date;
-        op.textContent=`${e.date} → ${e.kernel}`+(st==='deprecated'?'  ⚠ deprecated':(st==='active'?'  ✓':''));
+        op.textContent=`${e.date} → ${e.kernel}`+(st==='deprecated'?' — deprecated':(st==='active'?'  ✓':''));
         if(st==='deprecated')op.style.color='var(--warn)'; sel.appendChild(op);});
     }
   }catch(e){}
@@ -563,7 +551,7 @@ $('#runMulti').onclick=async()=>{
   if(saved){document.documentElement.setAttribute('data-theme',saved);}
   function cur(){return document.documentElement.getAttribute('data-theme')
     || (matchMedia('(prefers-color-scheme: light)').matches?'light':'dark');}
-  function paint(){$('#themeBtn').textContent = cur()==='light'?'☀️':'🌙';}
+  function paint(){$('#themeBtn').textContent = cur()==='light'?'◑':'◐';}
   paint();
   $('#themeBtn').onclick=()=>{const next=cur()==='light'?'dark':'light';
     document.documentElement.setAttribute('data-theme',next);store.set('gh_theme',next);paint();};
@@ -617,30 +605,6 @@ async function loadRuns(){
 $('#refreshVer').onclick=loadVersions;
 $('#refreshRuns').onclick=loadRuns;
 
-// ---- manager APKs (normal + spoofed) ----
-async function loadManagers(){
-  const box=$('#managers');
-  if(!tok()){box.innerHTML='<div class="muted" style="font-size:12px">Add a token &amp; refresh to list the latest Manager artifact (normal + spoofed).</div>';return;}
-  box.innerHTML='<div class="muted" style="font-size:12px">Loading…</div>';
-  try{
-    const runs=await gh(`/repos/${repo()}/actions/runs?per_page=25`);
-    let found=null;
-    for(const run of runs.workflow_runs){
-      const a=await gh(`/repos/${repo()}/actions/runs/${run.id}/artifacts`);
-      const m=(a.artifacts||[]).find(x=>/manager/i.test(x.name)&&!x.expired);
-      if(m){found={run,art:m};break;}
-    }
-    if(!found){box.innerHTML='<div class="muted" style="font-size:12px">No Manager artifact yet — run a build first.</div>';return;}
-    const {run,art}=found;
-    box.innerHTML=`
-      <div class="item"><span class="st idle"></span>
-        <span class="grow"><b>${art.name}</b><br><span class="muted mono" style="font-size:11px">contains normal + spoofed arm64 APK · from run ${run.id}</span></span>
-        <a class="chip" target="_blank" rel="noopener" href="${run.html_url}">download ↗</a></div>
-      <p class="muted" style="font-size:11px;margin:8px 2px 0">Open the run → <b>Artifacts</b> → <b>${art.name}</b> (a zip with <code>Manager-release/…-arm64-v8a-release.apk</code> and <code>Spoofed-Manager-release/…-spoofed…arm64-v8a-release.apk</code>). Install the <b>spoofed</b> one to stay hidden.</p>`;
-  }catch(e){box.innerHTML=`<div class="banner err" style="display:block">${e.message}</div>`;}
-}
-$('#refreshMgr').onclick=loadManagers;
-
 // ---- boot patcher ----
 let patchFile=null;
 $('#p_fileLabel').onclick=()=>$('#p_file').click();
@@ -689,7 +653,7 @@ $('#runPatch').onclick=async()=>{
     banner($('#pMsg'),'✓ Done! Download below. Delete the temp release once you have the file.','ok');
     $('#pResult').hidden=false;
     $('#pResult').innerHTML=`<a class="btn" style="display:inline-block;width:auto;text-decoration:none;text-align:center"
-        href="${done.browser_download_url}" download>⬇ Download ${done.name}</a>
+        href="${done.browser_download_url}" download>Download ${done.name}</a>
         <button class="btn ghost" id="cleanupRel" style="margin-left:8px">Delete temp release now</button>
         <p class="muted" style="font-size:11px;margin-top:8px">Flash with <code>fastboot flash init_boot ${done.name}</code> — back up your stock init_boot first.</p>`;
     $('#cleanupRel').onclick=async()=>{try{await gh(`/repos/${repo()}/releases/${rel.id}`,{method:'DELETE'});
@@ -702,7 +666,7 @@ $('#runPatch').onclick=async()=>{
 };
 
 // init
-loadKernels(); loadVersions(); if(tok()){loadRuns();loadManagers();}
+loadKernels(); loadVersions(); if(tok()){loadRuns();}
 </script>
 </body>
 </html>
