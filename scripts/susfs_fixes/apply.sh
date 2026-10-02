@@ -325,3 +325,7 @@ if [[ "$ANDROID_VERSION" == "android16" && "$KERNEL_VERSION" == "6.12" ]]; then
     echo "已修复 setuid_hook.c 重复定义问题"
   fi
 fi
+
+# 本仓库补充：补上 SUSFS 主补丁"头部 hunk 失配"造成的缺声明（上游 ab5f5fa 删掉了这批修复，
+# 但本仓库会构建上游没测试过的子版本，如 android13-5.15.206 / 2026-06）。详见 decl_fixes.sh。
+source "$(dirname "${BASH_SOURCE[0]}")/decl_fixes.sh"
