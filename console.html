@@ -225,6 +225,8 @@
         <label class="tg" data-opt="rekernel"><input type="checkbox" id="t_rekernel"> Re-Kernel</label>
         <label class="tg" data-opt="cve"><input type="checkbox" id="t_cve"> CVE-2026-43499 fix</label>
         <label class="tg" data-opt="supp"><input type="checkbox" id="t_supp"> OnePlus 8E</label>
+        <label class="tg" data-opt="networking" title="Network enhancement: BBRv3 TCP congestion control (5.10-6.6; 6.12 keeps BBR v1) set as the default, full IPSet + netfilter matches, FQ / FQ_CODEL / CAKE traffic shaping, in-kernel WireGuard, and the CIFS (SMB) client. Off = stock GKI network config."><input type="checkbox" id="t_net"> Network enhancement</label>
+        <label class="tg" data-opt="nomount" title="Builds the NoMount VFS path-redirection subsystem (CONFIG_NOMOUNT=y) into the kernel. It does nothing on its own: you still install the NoMount metamodule in the manager. Off = no NoMount in the kernel."><input type="checkbox" id="t_nomount"> NoMount (kernel)</label>
       </div>
       <button class="btn" id="runKernel">Start kernel build</button>
       <a class="btn ghost" id="openKernel" target="_blank" rel="noopener"
@@ -464,7 +466,7 @@ function actionsUrl(wf){return `https://github.com/${repo()}/actions/workflows/$
 // KPM exists only in SukiSU: ReSukiSU and Official declare no CONFIG_KPM, and build.yml aborts if KPM is
 // requested without it. The other toggles are kernel-level, so every variant supports them (SUSFS is built
 // into ReSukiSU/SukiSU and patched into Official).
-const KERNEL_OPTS=['susfs','zram','bbg','rekernel','cve','supp'];
+const KERNEL_OPTS=['susfs','zram','bbg','rekernel','cve','supp','networking','nomount'];
 const VARIANT_CAPS={
   'ReSukiSU':KERNEL_OPTS,
   'SukiSU':[...KERNEL_OPTS,'kpm'],
@@ -495,6 +497,7 @@ function kernelInputs(){return {
   droidspaces:'off', droidspaces_ntsync:false,
   use_zram:$('#t_zram').checked, use_bbg:$('#t_bbg').checked,
   use_rekernel:$('#t_rekernel').checked, cve_2026_43499_patch:$('#t_cve').checked,
+  use_networking:$('#t_net').checked, use_nomount:$('#t_nomount').checked,
   ksu_mode:$('#t_susfs').checked?'关闭':'禁用SUSFS', supp_op:$('#t_supp').checked
 };}
 const DEVICE_UNAME='5.15.206-android13-8-00056-g3f87b8704e9e-ab15683575';
