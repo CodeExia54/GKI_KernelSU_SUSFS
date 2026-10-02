@@ -468,7 +468,7 @@ function kernelInputs(){return {
   droidspaces:'off', droidspaces_ntsync:false,
   use_zram:$('#t_zram').checked, use_bbg:$('#t_bbg').checked,
   use_rekernel:$('#t_rekernel').checked, cve_2026_43499_patch:$('#t_cve').checked,
-  cancel_susfs:!$('#t_susfs').checked, supp_op:$('#t_supp').checked
+  ksu_mode:$('#t_susfs').checked?'关闭':'禁用SUSFS', supp_op:$('#t_supp').checked
 };}
 const DEVICE_UNAME='5.15.206-android13-8-00056-g3f87b8704e9e-ab15683575';
 $('#fillUname').onclick=()=>{$('#k_version').value=DEVICE_UNAME;};
@@ -526,7 +526,7 @@ async function dispatchOne(kv,patch,variant){
     headers:hdr(true),body:JSON.stringify({ref:ref(),inputs:{
       kernel_version:kv, os_patch_level:patch, kernelsu_variant:variant,
       use_kpm:'disabled (关闭)', artifact_upload_mode:'仅上传 AnyKernel3.zip',
-      use_zram:false,use_bbg:false,cancel_susfs:false}})});
+      use_zram:false,use_bbg:false,ksu_mode:'关闭'}})});
   return r.status===204;
 }
 $('#runMulti').onclick=async()=>{
