@@ -214,6 +214,10 @@ jobs:
           RUNS_URL="https://api.github.com/repos/$REPO/actions/workflows/$FILENAME/runs?status=success&per_page=30"
           if [ "${{ inputs.kernelsu_variant }}" == "Next" ]; then
             RUNS_URL="https://api.github.com/repos/$REPO/actions/workflows/$FILENAME/runs?branch=$BRANCH&status=success&per_page=30"
+          elif [ "${{ inputs.kernelsu_variant }}" == "ReSukiSU" ]; then
+            # 只取 main 分支的 push 构建：不带过滤会选到 PR / 功能分支(如 renovate/*、fix-execve)的 Manager，
+            # 而内核是 main。必须同时限定 event=push，否则 fork 的 main 分支 PR 也会混进来。
+            RUNS_URL="https://api.github.com/repos/$REPO/actions/workflows/$FILENAME/runs?branch=main&event=push&status=success&per_page=30"
           fi
 
           echo "开始查找不高于 KSU $TARGET_KSU_VERSION 的 Manager 产物..."
