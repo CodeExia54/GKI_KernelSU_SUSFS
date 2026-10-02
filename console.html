@@ -70,6 +70,7 @@
   .row{display:flex;gap:11px;flex-wrap:wrap}
   .row>div{flex:1;min-width:130px}
   .toggles{display:grid;grid-template-columns:1fr 1fr;gap:7px 14px;margin-top:9px}
+  [hidden]{display:none!important}
   .tg{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--fg)}
   .tg input{width:auto;accent-color:var(--accent)}
   button{cursor:pointer;font-family:var(--sans)}
@@ -190,7 +191,7 @@
             <option>SukiSU(40726)</option><option>SukiSU(40548)</option><option>Official</option>
           </select>
         </div>
-        <div>
+        <div data-opt="kpm">
           <label>KPM</label>
           <select id="k_kpm">
             <option value="disabled (关闭)">disabled</option>
@@ -198,6 +199,7 @@
           </select>
         </div>
       </div>
+      <div class="muted" id="k_note" style="font-size:11.5px;margin-top:6px"></div>
       <label>Artifact output</label>
       <select id="k_upload">
         <option value="仅上传 AnyKernel3.zip">AnyKernel3.zip only</option>
@@ -217,12 +219,12 @@
         </div>
       </div>
       <div class="toggles">
-        <label class="tg"><input type="checkbox" id="t_susfs" checked> SUSFS</label>
-        <label class="tg"><input type="checkbox" id="t_zram"> ZRAM (LZ4)</label>
-        <label class="tg"><input type="checkbox" id="t_bbg"> BBG anti-brick</label>
-        <label class="tg"><input type="checkbox" id="t_rekernel"> Re-Kernel</label>
-        <label class="tg"><input type="checkbox" id="t_cve"> CVE-2026-43499 fix</label>
-        <label class="tg"><input type="checkbox" id="t_supp"> OnePlus 8E</label>
+        <label class="tg" data-opt="susfs"><input type="checkbox" id="t_susfs" checked> SUSFS</label>
+        <label class="tg" data-opt="zram"><input type="checkbox" id="t_zram"> ZRAM (LZ4)</label>
+        <label class="tg" data-opt="bbg"><input type="checkbox" id="t_bbg"> BBG anti-brick</label>
+        <label class="tg" data-opt="rekernel"><input type="checkbox" id="t_rekernel"> Re-Kernel</label>
+        <label class="tg" data-opt="cve"><input type="checkbox" id="t_cve"> CVE-2026-43499 fix</label>
+        <label class="tg" data-opt="supp"><input type="checkbox" id="t_supp"> OnePlus 8E</label>
       </div>
       <button class="btn" id="runKernel">Start kernel build</button>
       <a class="btn ghost" id="openKernel" target="_blank" rel="noopener"
@@ -458,11 +460,36 @@ const WF_MATRIX={'5.10':'kernel-a12-5-10.yml','5.15':'kernel-a13-5-15.yml',
   '6.1':'kernel-a14-6-1.yml','6.6':'kernel-a15-6-6.yml','6.12':'kernel-a16-6-12.yml'};
 function actionsUrl(wf){return `https://github.com/${repo()}/actions/workflows/${wf}`;}
 
+// Build options each root variant really supports (checked against each root's kernel/Kconfig and build.yml).
+// KPM exists only in SukiSU: ReSukiSU and Official declare no CONFIG_KPM, and build.yml aborts if KPM is
+// requested without it. The other toggles are kernel-level, so every variant supports them (SUSFS is built
+// into ReSukiSU/SukiSU and patched into Official).
+const KERNEL_OPTS=['susfs','zram','bbg','rekernel','cve','supp'];
+const VARIANT_CAPS={
+  'ReSukiSU':KERNEL_OPTS,
+  'SukiSU':[...KERNEL_OPTS,'kpm'],
+  'SukiSU(40726)':[...KERNEL_OPTS,'kpm'],
+  'SukiSU(40548)':[...KERNEL_OPTS,'kpm'],
+  'Official':KERNEL_OPTS
+};
+const VARIANT_NOTE={
+  'ReSukiSU':'KPM is hidden: ReSukiSU has no KPM support.',
+  'Official':'KPM is hidden: official KernelSU has no KPM support.'
+};
+function supports(opt){return (VARIANT_CAPS[$('#k_variant').value]||KERNEL_OPTS).includes(opt);}
+function applyCaps(){
+  document.querySelectorAll('[data-opt]').forEach(el=>{el.hidden=!supports(el.dataset.opt);});
+  if(!supports('kpm'))$('#k_kpm').value='disabled (关闭)'; // never send a hidden option
+  $('#k_note').textContent=VARIANT_NOTE[$('#k_variant').value]||'';
+}
+$('#k_variant').onchange=applyCaps;
+applyCaps();
+
 function kernelInputs(){return {
   kernel_version:$('#k_kernel').value,
   os_patch_level:$('#k_patch').value,
   kernelsu_variant:$('#k_variant').value,
-  use_kpm:$('#k_kpm').value,
+  use_kpm:supports('kpm')?$('#k_kpm').value:'disabled (关闭)',
   artifact_upload_mode:$('#k_upload').value,
   version:$('#k_version').value.trim(), build_time:$('#k_btime').value.trim(),
   droidspaces:'off', droidspaces_ntsync:false,
