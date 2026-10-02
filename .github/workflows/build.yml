@@ -570,11 +570,17 @@ jobs:
               BRANCH="-s main"
               ;;
             "SukiSU")
-              # 改用最新发行版 tag，避免滚动 builtin 分支的破坏性 HEAD，以及
-              # builtin(内置 SUSFS) 与本流程 SUSFS 补丁重复打补丁的 .rej 冲突。
-              REL=$(resolve_latest_release "SukiSU-Ultra/SukiSU-Ultra")
-              if [ -n "$REL" ]; then BRANCH="-s $REL"; echo "SukiSU 使用最新发行版: $REL";
-              else echo "未解析到 SukiSU 发行版，回退 main"; BRANCH="-s main"; fi
+              # SukiSU 的 SUSFS 只在 builtin 分支里：所有发行版 tag 都从 main 打出，kernel/Kconfig 中没有
+              # KSU_SUSFS，而 apply.sh 对 SukiSU 也不会再补 KernelSU 侧(它按"内置 SUSFS"处理)。
+              # 所以启用 SUSFS 必须用 builtin；关闭 SUSFS 时才用最新发行版 tag(带产物=已知可用)。
+              if [ "${{ inputs.enable_susfs }}" = "false" ]; then
+                REL=$(resolve_latest_release "SukiSU-Ultra/SukiSU-Ultra")
+                if [ -n "$REL" ]; then BRANCH="-s $REL"; echo "SukiSU(无 SUSFS) 使用最新发行版: $REL";
+                else echo "未解析到 SukiSU 发行版，回退 main"; BRANCH="-s main"; fi
+              else
+                BRANCH="-s builtin"
+                echo "SukiSU 启用 SUSFS，使用 builtin 分支"
+              fi
               ;;
             "Official")
               # Official KernelSU 的 setup.sh 默认(无参)=最新 tag，这里显式解析
