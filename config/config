@@ -26,3 +26,8 @@ gki-android16-6.12=
 # ==================== SukiSU 的 commit hash ====================
 # 仅当 custom=true 且使用 SukiSU 变体时生效
 sukisu=b20dee702035af09cb2ecb5f35443bbc1747f3e6
+
+# ==================== ReSukiSU 的 commit hash ====================
+# 仅当 custom=true 且使用 ReSukiSU 变体时生效
+# 5b76b884 = 48fa4bb7 "kernel: suspend susfs build" 的父提交（该提交故意让 SUSFS 构建报错）
+resukisu=5b76b884c75f729a220bb317aa4a4fc78f0e0e9c

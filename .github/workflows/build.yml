@@ -640,6 +640,13 @@ jobs:
                 echo "SukiSU 使用自定义提交: $SUKISU_COMMIT"
               fi
             fi
+            if [ "$CUSTOM_ENABLED" == "true" ] && [ "$variant_input" == "ReSukiSU" ]; then
+              RESUKISU_COMMIT=$(grep "^resukisu=" "$CONFIG_FILE" | cut -d'=' -f2)
+              if [ -n "$RESUKISU_COMMIT" ]; then
+                BRANCH="-s $RESUKISU_COMMIT"
+                echo "ReSukiSU 使用自定义提交: $RESUKISU_COMMIT"
+              fi
+            fi
           fi
 
           echo "BRANCH=$BRANCH" >> $GITHUB_ENV
