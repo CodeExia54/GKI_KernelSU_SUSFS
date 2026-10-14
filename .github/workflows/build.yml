@@ -38,6 +38,11 @@ on:
         required: false
         type: string
         default: "r1"
+      source_ref:
+        description: "固定内核源码 tag（可选，如 android13-5.15-2026-06_r3，与原厂 uname 中的 g<hash> 对应）"
+        required: false
+        type: string
+        default: ""
       build_time:
         required: false
         type: string
@@ -131,7 +136,8 @@ jobs:
           echo "Droidspaces   : ${{ inputs.droidspaces }}"
           echo "NTSync        : ${{ inputs.droidspaces_ntsync }}"
           echo "产物上传模式  : ${{ inputs.artifact_upload_mode }}"
-          echo "Stock Config  : 自动检测 config/stock_defconfig"
+          echo "Stock Config  : 自动检测 config/stock/ 或 config/stock_defconfig"
+          echo "源码 tag      : ${{ inputs.source_ref }}"
           echo "========================================"
 
       - name: 清理磁盘空间
@@ -358,6 +364,8 @@ jobs:
 
       - name: 初始化并同步内核源码
         working-directory: ${{ env.KERNEL_ROOT }}
+        env:
+          SOURCE_REF: ${{ inputs.source_ref }}
         run: |
           FORMATTED_BRANCH="${{ inputs.android_version }}-${{ inputs.kernel_version }}-${{ inputs.os_patch_level }}"
           MAX_ATTEMPTS=3
@@ -405,6 +413,19 @@ jobs:
               echo "分支 ${FORMATTED_BRANCH} 已被上游删除，回退到发布 tag: $latest_tag"
               sed -i "/path=\"common\"/ s|revision=\"${FORMATTED_BRANCH}\"|revision=\"refs/tags/${latest_tag}\"|" $DEFAULT_MANIFEST_PATH
               TAG_FALLBACK="$latest_tag"
+            fi
+
+            # 指定了源码 tag 时，把 common 固定到该发布 tag，使源码与原厂内核逐提交一致
+            if [ -n "$SOURCE_REF" ]; then
+              local tag="${SOURCE_REF#refs/tags/}"
+              if ! git ls-remote --exit-code https://android.googlesource.com/kernel/common "refs/tags/${tag}" >/dev/null; then
+                echo "::error::上游不存在源码 tag: ${tag}"
+                return 1
+              fi
+              sed -i -E "/path=\"common\"/ s|revision=\"[^\"]*\"|revision=\"refs/tags/${tag}\"|" $DEFAULT_MANIFEST_PATH
+              echo "已将 common 固定到发布 tag: ${tag}"
+              grep 'path="common"' $DEFAULT_MANIFEST_PATH
+              TAG_FALLBACK="$tag"
             fi
           }
 
@@ -458,7 +479,10 @@ jobs:
 
       - name: 应用 Stock Config 伪装
         run: |
-          STOCK_SRC="$GITHUB_WORKSPACE/config/stock_defconfig"
+          # 优先使用与当前分支对应的原厂配置（config/stock/<android>-<kernel>-<补丁级别>.config），
+          # 避免一份原厂配置被套到其他版本的内核上
+          STOCK_SRC="$GITHUB_WORKSPACE/config/stock/${{ inputs.android_version }}-${{ inputs.kernel_version }}-${{ inputs.os_patch_level }}.config"
+          [ -f "$STOCK_SRC" ] || STOCK_SRC="$GITHUB_WORKSPACE/config/stock_defconfig"
           STOCK_DST="$KERNEL_ROOT/common/arch/arm64/configs/stock_defconfig"
 
           if [ ! -f "$STOCK_SRC" ]; then

@@ -74,6 +74,10 @@ on:
         required: true
         type: string
         default: "2022-01"
+      source_ref:
+        description: "固定源码 tag (可选，如 android13-5.15-2026-06_r3)"
+        required: false
+        type: string
       version:
         description: "自定义版本名 (可选)"
         required: false
@@ -212,6 +216,7 @@ jobs:
       sub_level: ${{ needs.resolve-version.outputs.sub_level }}
       os_patch_level: ${{ inputs.os_patch_level }}
       revision: "r1"
+      source_ref: ${{ inputs.source_ref || '' }}
       ksu_variant: ${{ inputs.kernelsu_variant }}
       version: ${{ inputs.version || '' }}
       build_time: ${{ inputs.build_time || '' }}
