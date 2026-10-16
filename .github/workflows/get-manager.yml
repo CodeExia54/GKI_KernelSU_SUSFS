@@ -135,7 +135,9 @@ jobs:
           gh_json() {
             local url="$1" attempt out http body
             for attempt in 1 2 3 4 5; do
-              if out=$(curl -sS "${GH_HDRS[@]}" -w $'\n%{http_code}' "$url" 2>/dev/null); then
+              # --location 必须：上游仓库重命名后 api.github.com 对旧路径返回 301（跳到 /repositories/<id>/...），
+              # 不跟随就会拿到无 .workflow_runs 的 301 响应——这正是此前静默发布空版本的根因。
+              if out=$(curl -sS --location --max-redirs 5 "${GH_HDRS[@]}" -w $'\n%{http_code}' "$url" 2>/dev/null); then
                 http=$(printf '%s' "$out" | tail -n1)
                 body=$(printf '%s' "$out" | sed '$d')
                 if [ "$http" = "200" ] && printf '%s' "$body" | jq -e . >/dev/null 2>&1; then
