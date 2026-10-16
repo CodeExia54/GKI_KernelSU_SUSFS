@@ -123,8 +123,34 @@ jobs:
 
       - name: 添加 KernelSU
         id: add_KSU
-        continue-on-error: true
+        env:
+          GH_PAT: ${{ secrets.GH_PAT }}
         run: |
+          # 健壮的 GitHub API 拉取：重试 + 校验 JSON；错误响应直接失败，
+          # 避免把 {"message":...}/限流响应当成"0 条构建"而静默发布不含管理器的空版本。
+          # 可选：在仓库 Secrets 配置 GH_PAT（具 actions:read）以更稳地跨仓库读取/下载产物；缺省回退 GITHUB_TOKEN。
+          API_TOKEN="${GH_PAT:-${GH_TOKEN:-}}"
+          GH_HDRS=(-H "Accept: application/vnd.github+json" -H "X-GitHub-Api-Version: 2022-11-28")
+          [ -n "$API_TOKEN" ] && GH_HDRS+=(-H "Authorization: token $API_TOKEN")
+          gh_json() {
+            local url="$1" attempt out http body
+            for attempt in 1 2 3 4 5; do
+              if out=$(curl -sS "${GH_HDRS[@]}" -w $'\n%{http_code}' "$url" 2>/dev/null); then
+                http=$(printf '%s' "$out" | tail -n1)
+                body=$(printf '%s' "$out" | sed '$d')
+                if [ "$http" = "200" ] && printf '%s' "$body" | jq -e . >/dev/null 2>&1; then
+                  printf '%s' "$body"; return 0
+                fi
+                echo "::warning::GitHub API $url 返回 HTTP ${http}（第 ${attempt} 次），重试中..." >&2
+              else
+                echo "::warning::GitHub API $url 连接失败（第 ${attempt} 次），重试中..." >&2
+              fi
+              sleep $((attempt * 3))
+            done
+            echo "::error::GitHub API 多次重试后仍失败: $url" >&2
+            return 1
+          }
+
           case "${{ inputs.kernelsu_variant }}" in
             "SukiSU(40726)") LEGACY_RELEASE_TAG="v2.1.0-r2"; LEGACY_DIR="SukiSU_40726" ;;
             "SukiSU(40548)") LEGACY_RELEASE_TAG="v2.0.0-r34"; LEGACY_DIR="SukiSU_40548" ;;
@@ -224,9 +250,21 @@ jobs:
           for PAGE in $(seq 1 10); do
             echo "--------------------------------------------------"
             echo "正在检查第 ${PAGE} 页历史构建..."
-            RUNS=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" "$RUNS_URL&page=$PAGE")
+            if ! RUNS=$(gh_json "$RUNS_URL&page=$PAGE"); then
+              echo "::error::无法获取 $REPO 的构建列表（第 $PAGE 页）。中止，避免发布不含管理器的版本。"
+              exit 1
+            fi
+            # 必须是数组；错误对象不能被当成"0 条构建"而静默跳过（这正是上次静默失败的根因）。
+            if [ "$(printf '%s' "$RUNS" | jq -r '.workflow_runs | type')" != "array" ]; then
+              echo "::error::构建列表响应异常（.workflow_runs 非数组）：$(printf '%s' "$RUNS" | head -c 300)"
+              exit 1
+            fi
             RUN_COUNT=$(printf '%s' "$RUNS" | jq '.workflow_runs | length')
             if [ "$RUN_COUNT" -eq 0 ]; then
+              if [ "$PAGE" -eq 1 ]; then
+                echo "::error::$REPO 的 $FILENAME 过滤后无任何成功构建（检查分支/事件过滤与令牌权限）。"
+                exit 1
+              fi
               break
             fi
 
@@ -245,8 +283,10 @@ jobs:
                 continue
               fi
 
-              ARTIFACTS=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-                "https://api.github.com/repos/$REPO/actions/runs/$BUILD_ID/artifacts")
+              if ! ARTIFACTS=$(gh_json "https://api.github.com/repos/$REPO/actions/runs/$BUILD_ID/artifacts?per_page=100"); then
+                echo "跳过构建 $BUILD_ID: 无法获取产物列表"
+                continue
+              fi
               CANDIDATE_LIST=$(get_manager_artifacts "$ARTIFACTS")
               if [ -z "$CANDIDATE_LIST" ]; then
                 echo "跳过构建 $BUILD_ID ($HEAD_BRANCH): 未找到包含 '$KSUM' 的产物"
@@ -273,15 +313,27 @@ jobs:
           fi
           echo "选择 Manager 构建 $BEST_BUILD_ID ($BEST_BRANCH), KSU $BEST_VERSION"
 
-          echo "$DOWNLOAD_LIST" | while IFS=$'\t' read -r NAME URL; do
+          # 注意：用 here-string 而非管道，避免 while 进入子 shell 导致下载失败时 exit 1 无法中止本步骤。
+          while IFS=$'\t' read -r NAME URL; do
+            [ -z "$NAME" ] && continue
             SAFE_NAME=$(echo "$NAME" | tr '/ ' '__')
             ZIP_NAME="${{ inputs.kernelsu_variant }}-${SAFE_NAME}(${{ env.KSU_VERSION }}).zip"
             echo "下载 $NAME -> $ZIP_NAME"
-            curl -L -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" -o "$ZIP_NAME" "$URL"
+            if ! curl -sS --fail-with-body --location --retry 3 --retry-all-errors \
+                 --retry-delay 2 --connect-timeout 15 --max-time 300 \
+                 "${GH_HDRS[@]}" -o "$ZIP_NAME" "$URL"; then
+              echo "::error::下载 Manager 产物失败：$NAME。若为跨仓库 403，请在 Secrets 配置具 actions:read 的 GH_PAT。"
+              exit 1
+            fi
+            if ! unzip -tq "$ZIP_NAME" >/dev/null 2>&1; then
+              echo "::error::下载的产物不是有效 zip（可能是错误响应）：$NAME"
+              head -c 300 "$ZIP_NAME" || true
+              exit 1
+            fi
             mkdir -p "manager-artifacts/$SAFE_NAME"
             unzip -o "$ZIP_NAME" -d "manager-artifacts/$SAFE_NAME"
             rm -rf "$ZIP_NAME"
-          done
+          done <<< "$DOWNLOAD_LIST"
 
           if [ "${{ inputs.kernelsu_variant }}" == "ReSukiSU" ]; then
             echo "仅保留 ReSukiSU arm64-v8a release 管理器..."

@@ -1,0 +1,101 @@
+name: 仅构建管理器 (测试，不建内核)
+
+# 只跑 get-manager（从上游官方 CI 拉取管理器，ReSukiSU 会同时取普通版与 Spoofed 随机包名版），
+# 然后把 APK 发到一个预发布 Release。用来快速验证 get-manager.yml 的拉取逻辑，无需编译完整内核。
+
+permissions:
+  contents: write
+  actions: read
+
+on:
+  workflow_dispatch:
+    inputs:
+      kernelsu_variant:
+        description: "KernelSU 变体"
+        type: choice
+        default: ReSukiSU
+        options:
+          - ReSukiSU
+          - SukiSU
+          - Next
+          - Official
+      publish_release:
+        description: "把 APK 发布到 Release"
+        type: boolean
+        default: true
+
+jobs:
+  get-ksu-manager:
+    uses: ./.github/workflows/get-manager.yml
+    secrets: inherit
+    with:
+      kernelsu_variant: ${{ inputs.kernelsu_variant }}
+
+  release-manager:
+    needs: get-ksu-manager
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - name: 下载 Manager 产物
+        uses: actions/download-artifact@v8
+        with:
+          pattern: "${{ inputs.kernelsu_variant }}-Manager*"
+          path: dl
+          merge-multiple: true
+
+      - name: 整理 APK（区分普通版 / Spoofed 版）
+        id: collect
+        run: |
+          set -euo pipefail
+          echo "内核侧 KSU 版本: ${{ needs.get-ksu-manager.outputs.ksuVer }}"
+          echo "SUSFS 版本:      ${{ needs.get-ksu-manager.outputs.susVer }}"
+          echo "下载内容:"
+          find dl -type f -print || true
+
+          mkdir -p out
+          # ReSukiSU 的普通版与 Spoofed 版 arm64 APK 文件名相同，仅靠所在子目录区分，
+          # 发布前按父目录重命名，避免 Release 资产同名冲突。
+          while IFS= read -r f; do
+            parent="$(basename "$(dirname "$f")")"
+            base="$(basename "$f")"
+            case "$parent" in
+              *Spoofed*) newname="${base%.apk}-spoofed.apk" ;;
+              *)         newname="$base" ;;
+            esac
+            # 若仍重名则追加父目录名，保证唯一
+            [ -e "out/$newname" ] && newname="${parent}-${newname}"
+            cp -f "$f" "out/$newname"
+          done < <(find dl -type f -name "*.apk")
+
+          count=$(find out -type f -name "*.apk" | wc -l)
+          echo "共整理 $count 个 APK:"
+          find out -type f -name "*.apk" -printf '  %f\n' | sort
+          if [ "$count" -eq 0 ]; then
+            echo "::error::未找到任何 APK —— 管理器获取失败（请看 get-ksu-manager 日志）。"
+            exit 1
+          fi
+          echo "count=$count" >> "$GITHUB_OUTPUT"
+
+      - name: 发布 Release
+        if: ${{ inputs.publish_release }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          VAR="${{ inputs.kernelsu_variant }}"
+          KSUVER="${{ needs.get-ksu-manager.outputs.ksuVer }}"
+          TAG="manager-${VAR}-${KSUVER}"
+          mapfile -t APKS < <(find out -type f -name "*.apk" | sort)
+          NOTES="仅管理器测试构建（无内核）。变体: ${VAR}，KSU: ${KSUVER}。ReSukiSU 含普通版与 Spoofed（随机包名）版 arm64 管理器。"
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release $TAG 已存在，覆盖资产..."
+            gh release upload "$TAG" "${APKS[@]}" --clobber --repo "$GITHUB_REPOSITORY"
+          else
+            gh release create "$TAG" "${APKS[@]}" \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "Manager ${VAR} (KSU ${KSUVER})" \
+              --notes "$NOTES" \
+              --prerelease
+          fi
+          echo "已发布: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/releases/tag/${TAG}"
