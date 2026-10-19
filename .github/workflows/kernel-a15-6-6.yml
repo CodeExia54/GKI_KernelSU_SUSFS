@@ -1,4 +1,4 @@
-name: 内核构建 - Android 15 (6.6)
+name: Kernel Build - Android 15 (6.6)
 
 permissions:
   contents: write
@@ -7,9 +7,9 @@ permissions:
 on:
   workflow_dispatch:
     inputs:
-      # ==================== 下拉选项 ====================
+      # ==================== Dropdown options ====================
       kernelsu_variant:
-        description: "KernelSU 变体"
+        description: "KernelSU variant"
         required: true
         type: choice
         options:
@@ -21,7 +21,7 @@ on:
           - ReSukiSU
         default: ReSukiSU
       ksu_mode:
-        description: "KernelSU / SUSFS 模式"
+        description: "KernelSU / SUSFS mode"
         required: true
         type: choice
         options:
@@ -30,7 +30,7 @@ on:
           - 禁用KSU
         default: 关闭
       use_kpm:
-        description: "KPM 功能（patched 尚不支持）"
+        description: "KPM feature (patched not yet supported)"
         required: true
         type: choice
         default: "disabled (关闭)"
@@ -39,7 +39,7 @@ on:
           - "enabled (开启)"
           - "patched (开启并修补，尚不支持)"
       droidspaces:
-        description: "Droidspaces 容器支持"
+        description: "Droidspaces container support"
         required: false
         type: choice
         options:
@@ -49,7 +49,7 @@ on:
           - "345"
         default: "off"
       artifact_upload_mode:
-        description: "构建产物上传模式"
+        description: "Build artifact upload mode"
         required: true
         type: choice
         options:
@@ -57,55 +57,55 @@ on:
           - "上传全部"
         default: "仅上传 AnyKernel3.zip"
 
-      # ==================== 文本输入 ====================
+      # ==================== Text inputs ====================
       version:
-        description: "自定义版本名 (可选)"
+        description: "Custom version name (optional)"
         required: false
         type: string
       build_time:
-        description: "自定义构建时间 (可选，N或留空=当前UTC)"
+        description: "Custom build time (optional, N or empty = current UTC)"
         required: false
         type: string
         default: "Sun Dec 01 08:10:00 UTC 2024"
 
-      # ==================== 开关（默认关闭） ====================
+      # ==================== Toggles (default off) ====================
       use_zram:
-        description: "启用 ZRAM 增强算法"
+        description: "Enable ZRAM enhanced algorithms"
         required: true
         type: boolean
         default: false
       use_bbg:
-        description: "启用 BBG 防格机"
+        description: "Enable BBG anti-brick"
         required: true
         type: boolean
         default: false
       use_rekernel:
-        description: "启用 Re-Kernel 驱动"
+        description: "Enable Re-Kernel driver"
         required: false
         type: boolean
         default: false
       use_nomount:
-        description: "启用 NoMount 挂载元模块"
+        description: "Enable NoMount mount meta-module"
         required: false
         type: boolean
         default: false
       use_networking:
-        description: "启用网络增强（BBRv3 / IPSet / Qdisc / CIFS）"
+        description: "Enable network enhancements (BBRv3 / IPSet / Qdisc / CIFS)"
         required: false
         type: boolean
         default: false
       cve_2026_43499_patch:
-        description: "应用 CVE-2026-43499 rtmutex 修复链"
+        description: "Apply CVE-2026-43499 rtmutex fix chain"
         required: false
         type: boolean
         default: false
       supp_op:
-        description: "启用一加 8E 支持"
+        description: "Enable OnePlus 8E support"
         required: false
         type: boolean
         default: false
       droidspaces_ntsync:
-        description: "启用 Droidspaces 容器 NTSync 支持（需启用 Droidspaces）"
+        description: "Enable Droidspaces container NTSync support (requires Droidspaces enabled)"
         required: false
         type: boolean
         default: false
@@ -166,12 +166,12 @@ on:
         type: boolean
         default: false
       called_from_main:
-        description: "是否从 main.yml 调用（内部使用）"
+        description: "Whether called from main.yml (internal use)"
         required: false
         type: boolean
         default: false
       export_susfs_patches:
-        description: "导出 SUSFS 集成补丁（由 main.yml 传入）"
+        description: "Export SUSFS integration patches (passed in by main.yml)"
         required: false
         type: boolean
         default: false
@@ -238,7 +238,7 @@ jobs:
       droidspaces_ntsync: ${{ inputs.droidspaces_ntsync || false }}
       artifact_upload_mode: ${{ inputs.artifact_upload_mode }}
 
-  # 仅在直接触发时运行，从 main.yml 调用时跳过
+  # Only runs on direct trigger; skipped when called from main.yml
   get-ksu-manager:
     if: ${{ !inputs.called_from_main }}
     uses: ./.github/workflows/get-manager.yml
