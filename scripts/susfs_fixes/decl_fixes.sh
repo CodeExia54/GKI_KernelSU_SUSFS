@@ -89,11 +89,8 @@ fi
 
 # Android 16 - 6.12 修复
 if [[ "$ANDROID_VERSION" == "android16" && "$KERNEL_VERSION" == "6.12" ]]; then
-  # 修复 6.12.23 / 6.12.58+: exec.c 头部 hunk 失配导致 SUSFS 补丁漏掉 susfs_def.h。
-  # exec.c 实际用到的符号是 susfs_is_current_proc_no_su（susfs_is_current_proc_umounted
-  # 只出现在 namespace.c），早期守卫写错了符号名，.23 上下文（无 dma-buf.h）始终匹配不到，
-  # 故放宽为匹配 exec.c 里任一 SUSFS 符号。
-  if grep -qE 'susfs_is_current_proc_no_su|susfs_is_current_proc_umounted|SUSFS_IS_INODE_SUS_MAP' ./fs/exec.c && ! grep -qF '#include <linux/susfs_def.h>' ./fs/exec.c; then
+  # 修复 6.12.58+: exec.c 头部上下文变化导致 SUSFS 补丁漏掉 susfs_def.h
+  if grep -q 'susfs_is_current_proc_umounted' ./fs/exec.c && ! grep -qF '#include <linux/susfs_def.h>' ./fs/exec.c; then
     if grep -qF '#include <linux/dma-buf.h>' ./fs/exec.c; then
       sed -i '/#include <linux\/dma-buf.h>/a #ifdef CONFIG_KSU_SUSFS\n#include <linux\/susfs_def.h>\n#endif' ./fs/exec.c
     else

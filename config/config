@@ -21,7 +21,13 @@ gki-android12-5.10=
 gki-android13-5.15=
 gki-android14-6.1=
 gki-android15-6.6=
-gki-android16-6.12=
+# acb92d4 (2026-10-15): BakaSU/ReSukiSU 5b76b884 (v4.2.0-rc3) 配套的 SUSFS。
+# 此后 simonpunk 上游同步 official KernelSU main，给 6.12 补丁加入了 ksu_setup_preinit_file /
+# ksu_preinit_handle_post_execveat 以及外部 my_write_context/my_setprocattr 调用，而 BakaSU 走
+# 内联 hook、不导出这些符号，HEAD SUSFS 会导致链接期 undefined symbol；并且 bd27568 起补丁 rebase
+# 到 6.12.92，头部 hunk 在 6.12.23 上失配。acb92d4 仅用 ksu_handle_execveat* 内联钩子、不打 selinux 补丁，
+# exec.c 头部锚定在 ksm.h，可干净套用于 6.12.23。
+gki-android16-6.12=acb92d4abc922cac384a207744b2db40281a7c7f
 
 # ==================== SukiSU 的 commit hash ====================
 # 仅当 custom=true 且使用 SukiSU 变体时生效
