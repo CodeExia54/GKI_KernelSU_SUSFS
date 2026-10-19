@@ -2,13 +2,13 @@ name: Auto Trigger on SukiSU Update
 
 on:
   schedule:
-    - cron: '0 0 */3 * *'  # 每三天 UTC 00:00 运行
+    - cron: '0 0 */3 * *'  # every three days at 00:00 UTC
   workflow_dispatch:
 
 jobs:
   check-and-trigger:
     runs-on: ubuntu-24.04
-    # 仅允许指定仓库所有者触发自动构建
+    # Only the designated repo owner may trigger auto builds
     if: contains(fromJSON('["zzh20188", "elysias123"]'), github.repository_owner)
     steps:
       - name: Checkout repository

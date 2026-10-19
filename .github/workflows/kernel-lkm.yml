@@ -1,13 +1,13 @@
 # ========================================
-# KernelSU LKM (kernelsu.ko) 构建
+# KernelSU LKM (kernelsu.ko) build
 # ========================================
-# 使用 ylarod 的 ddk-min 容器，把所选 root 变体的 kernel/ 模块目录
-# 以 CONFIG_KSU=m 方式编译成可加载内核模块 kernelsu.ko。
-# 产物：<kmi>_kernelsu.ko 作为 Actions artifact 上传。
-# 参考：ReSukiSU/ReSukiSU 的 build-lkm.yml + ddk-lkm.yml。
+# Use ylarod's ddk-min container to compile the selected root variant's kernel/ module directory
+# as a loadable kernel module kernelsu.ko with CONFIG_KSU=m.
+# Artifact: <kmi>_kernelsu.ko uploaded as an Actions artifact.
+# Reference: ReSukiSU/ReSukiSU's build-lkm.yml + ddk-lkm.yml.
 # ========================================
 
-name: 构建 LKM (kernelsu.ko)
+name: Build LKM (kernelsu.ko)
 
 permissions:
   contents: read
@@ -16,7 +16,7 @@ on:
   workflow_dispatch:
     inputs:
       variant:
-        description: "Root 变体 (LKM 源)"
+        description: "Root variant (LKM source)"
         type: choice
         default: ReSukiSU
         options:
@@ -25,7 +25,7 @@ on:
           - KernelSU
           - KernelSU-Next
       kmi:
-        description: "KMI 版本 (android版本-内核版本)"
+        description: "KMI version (android version-kernel version)"
         type: choice
         default: android13-5.15
         options:
@@ -38,7 +38,7 @@ on:
           - android16-6.12
           - android17-6.18
       arch:
-        description: "目标架构"
+        description: "Target architecture"
         type: choice
         default: arm64
         options:
@@ -46,7 +46,7 @@ on:
           - x86_64
           - both
       ddk_release:
-        description: "DDK 容器版本 (ghcr.io/ylarod/ddk-min 标签日期)"
+        description: "DDK container version (ghcr.io/ylarod/ddk-min tag date)"
         type: string
         default: "20260828"
 
@@ -59,7 +59,7 @@ jobs:
       options: --privileged
 
     steps:
-      - name: 解析变体源仓库
+      - name: Resolve the variant source repo
         id: src
         run: |
           case "${{ inputs.variant }}" in
@@ -67,35 +67,35 @@ jobs:
             "SukiSU-Ultra")   REPO="SukiSU-Ultra/SukiSU-Ultra"; REF="main" ;;
             "KernelSU")       REPO="tiann/KernelSU"; REF="main" ;;
             "KernelSU-Next")  REPO="KernelSU-Next/KernelSU-Next"; REF="next" ;;
-            *) echo "未知变体"; exit 1 ;;
+            *) echo "unknown variant"; exit 1 ;;
           esac
           echo "repo=$REPO" >> "$GITHUB_OUTPUT"
           echo "ref=$REF"   >> "$GITHUB_OUTPUT"
-          echo "选择变体: ${{ inputs.variant }} -> $REPO@$REF"
+          echo "Selected variant: ${{ inputs.variant }} -> $REPO@$REF"
 
-      - name: 检出变体源码
+      - name: Checkout the variant source
         uses: actions/checkout@v7
         with:
           repository: ${{ steps.src.outputs.repo }}
           ref: ${{ steps.src.outputs.ref }}
 
-      - name: 允许 git 安全目录
+      - name: Allow git safe directory
         run: git config --global --add safe.directory '*'
 
-      - name: 定位模块目录
+      - name: Locate the module directory
         id: mod
         run: |
-          # KernelSU 系列模块 Makefile 均位于 kernel/ ；个别布局兜底探测
+          # KernelSU-family module Makefiles all live in kernel/; probe as a fallback for unusual layouts
           for d in kernel kernel/kernelsu .; do
             if [ -f "$d/Makefile" ] && grep -qiE "kernelsu|CONFIG_KSU" "$d/Makefile" 2>/dev/null; then
-              echo "dir=$d" >> "$GITHUB_OUTPUT"; echo "模块目录: $d"; exit 0
+              echo "dir=$d" >> "$GITHUB_OUTPUT"; echo "module directory: $d"; exit 0
             fi
           done
-          # 默认回退到 kernel/
+          # Default fallback to kernel/
           echo "dir=kernel" >> "$GITHUB_OUTPUT"
-          echo "未精确匹配，回退到 kernel/"
+          echo "No exact match, falling back to kernel/"
 
-      - name: 编译 kernelsu.ko (arm64)
+      - name: Compile kernelsu.ko (arm64)
         if: ${{ inputs.arch == 'arm64' || inputs.arch == 'both' }}
         run: |
           set -ex
@@ -108,7 +108,7 @@ jobs:
           ls -la "$OUT_DIR"
           modinfo "$OUT_DIR/${{ inputs.kmi }}_kernelsu.ko" 2>/dev/null || true
 
-      - name: 上传 arm64 artifact
+      - name: Upload arm64 artifact
         if: ${{ inputs.arch == 'arm64' || inputs.arch == 'both' }}
         uses: actions/upload-artifact@v7
         with:
@@ -116,7 +116,7 @@ jobs:
           path: /github/workspace/out/aarch64/${{ inputs.kmi }}_kernelsu.ko
           if-no-files-found: error
 
-      - name: 编译 kernelsu.ko (x86_64)
+      - name: Compile kernelsu.ko (x86_64)
         if: ${{ inputs.arch == 'x86_64' || inputs.arch == 'both' }}
         run: |
           set -ex
@@ -128,7 +128,7 @@ jobs:
           pushd "/opt/ddk/src/$kmi"
           export KDIR="/opt/ddk/kdir-x64/$kmi"
 
-          # ddk-min x86 kdir 的 modpost 补丁需幂等应用
+          # The modpost patch for ddk-min x86 kdir must be applied idempotently
           MODPOST=scripts/mod/modpost.c
           sed -i -E 's/^([[:space:]]*)check_exports\(mod\);/\1\/\/ check_exports(mod);/' "$MODPOST" || true
           sed -i -E 's/^([[:space:]]*)s->module = exp->module;/\1\/\/ s->module = exp->module;/' "$MODPOST" || true
@@ -154,7 +154,7 @@ jobs:
           llvm-strip -d "$OUT_DIR/${{ inputs.kmi }}_kernelsu.ko" || true
           ls -la "$OUT_DIR"
 
-      - name: 上传 x86_64 artifact
+      - name: Upload x86_64 artifact
         if: ${{ inputs.arch == 'x86_64' || inputs.arch == 'both' }}
         uses: actions/upload-artifact@v7
         with:

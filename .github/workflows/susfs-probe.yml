@@ -1,9 +1,9 @@
-name: SUSFS 原始补丁探测
+name: SUSFS raw-patch probe
 
-# 这是放在默认分支上的空壳：GitHub 只列出默认分支上存在的 workflow_dispatch 工作流。
-# 真正的探测逻辑在长期工具分支 susfs-probe 上（同名文件），运行时在 Actions 页面的
-# 「Use workflow from」里选择 susfs-probe 分支即可；本文件的输入必须与工具分支保持一致。
-# 在 dev 上直接运行只会打印提示，不会构建任何东西。
+# This is an empty shell on the default branch: GitHub only lists workflow_dispatch workflows that exist on the default branch.
+# The real probe logic lives on the long-lived tooling branch susfs-probe (same file name); at run time, in the Actions page's
+# "Use workflow from", select the susfs-probe branch; this file's inputs must stay in sync with the tooling branch.
+# Running it directly on dev only prints a notice and builds nothing.
 
 permissions:
   contents: read
@@ -12,7 +12,7 @@ on:
   workflow_dispatch:
     inputs:
       kernel_version:
-        description: "内核版本（all = 全部分支）"
+        description: "Kernel version (all = all branches)"
         required: true
         type: choice
         options:
@@ -24,7 +24,7 @@ on:
           - "6.12"
         default: all
       kernelsu_variant:
-        description: "KernelSU 变体"
+        description: "KernelSU variant"
         required: true
         type: choice
         options:
@@ -33,58 +33,58 @@ on:
           - Official
         default: SukiSU
       sub_level_min:
-        description: "最小子版本号（留空不限）"
+        description: "Minimum sublevel (empty = no limit)"
         required: false
         type: string
         default: ""
       sub_level_max:
-        description: "最大子版本号（留空不限）"
+        description: "Maximum sublevel (empty = no limit)"
         required: false
         type: string
         default: ""
       os_patch_levels:
-        description: "只探测这些安全补丁月份，逗号分隔（留空不限，如 2025-03,2025-07）"
+        description: "Probe only these security-patch months, comma-separated (empty = no limit, e.g. 2025-03,2025-07)"
         required: false
         type: string
         default: ""
       include_lts:
-        description: "同时探测 LTS 分支"
+        description: "Also probe the LTS branch"
         required: false
         type: boolean
         default: true
       susfs_side_fixes:
-        description: "保留与子版本无关的 SUSFS 侧修复（5.10 上游补丁自身的两处编译缺陷）"
+        description: "Keep the sublevel-independent SUSFS-side fixes (two compile defects in the 5.10 upstream patch itself)"
         required: false
         type: boolean
         default: false
       susfs_pin_time:
-        description: "susfs4ksu 固定到该时刻之前的最后一次提交（ISO 8601，留空 = 本次运行开始时刻）"
+        description: "Pin susfs4ksu to the last commit before this instant (ISO 8601, empty = this run's start time)"
         required: false
         type: string
         default: ""
       upload_kernels:
-        description: "上传编译出的 AnyKernel3 包（默认只留探测结论）"
+        description: "Upload the compiled AnyKernel3 package (by default only the probe conclusion is kept)"
         required: false
         type: boolean
         default: false
       max_parallel:
-        description: "最大并行任务数"
+        description: "Maximum number of parallel jobs"
         required: false
         type: string
         default: "20"
       data_source:
-        description: "版本数据与已有探测结果的来源分支"
+        description: "Source branch for the version data and existing probe results"
         required: false
         type: string
         default: dev
 
 jobs:
   notice:
-    name: 请选择 susfs-probe 分支运行
+    name: Please select the susfs-probe branch to run
     runs-on: ubuntu-24.04
     steps:
-      - name: 提示
+      - name: Notice
         run: |
-          echo "::error::这是 dev 上的空壳工作流，不会构建任何东西。"
-          echo "::error::请在 Run workflow 的「Use workflow from」里选择分支 susfs-probe 后再运行。"
+          echo "::error::This is an empty shell workflow on dev; it builds nothing."
+          echo "::error::In Run workflow's 'Use workflow from', select the susfs-probe branch before running."
           exit 1

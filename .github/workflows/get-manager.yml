@@ -54,12 +54,12 @@ jobs:
           echo " "
           echo "======================================================="
 
-      - name: 安装依赖
+      - name: Install dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y git curl jq
 
-      - name: 获取 KSU & SUSFS 版本
+      - name: Get KSU & SUSFS versions
         id: get_version
         run: |
 
@@ -121,35 +121,35 @@ jobs:
           echo "kversion=$KSU_VERSION" >> $GITHUB_OUTPUT
           echo "sversion=$SUS_VERSION" >> $GITHUB_OUTPUT
 
-      - name: 添加 KernelSU
+      - name: Add KernelSU
         id: add_KSU
         env:
           GH_PAT: ${{ secrets.GH_PAT }}
         run: |
-          # 健壮的 GitHub API 拉取：重试 + 校验 JSON；错误响应直接失败，
-          # 避免把 {"message":...}/限流响应当成"0 条构建"而静默发布不含管理器的空版本。
-          # 可选：在仓库 Secrets 配置 GH_PAT（具 actions:read）以更稳地跨仓库读取/下载产物；缺省回退 GITHUB_TOKEN。
+          # Robust GitHub API fetch: retry + validate JSON; error responses fail immediately,
+          # to avoid treating {"message":...}/rate-limit responses as "0 builds" and silently publishing an empty release without the manager.
+          # Optional: set GH_PAT (with actions:read) in repo Secrets for more reliable cross-repo artifact read/download; falls back to GITHUB_TOKEN by default.
           API_TOKEN="${GH_PAT:-${GH_TOKEN:-}}"
           GH_HDRS=(-H "Accept: application/vnd.github+json" -H "X-GitHub-Api-Version: 2022-11-28")
           [ -n "$API_TOKEN" ] && GH_HDRS+=(-H "Authorization: token $API_TOKEN")
           gh_json() {
             local url="$1" attempt out http body
             for attempt in 1 2 3 4 5; do
-              # --location 必须：上游仓库重命名后 api.github.com 对旧路径返回 301（跳到 /repositories/<id>/...），
-              # 不跟随就会拿到无 .workflow_runs 的 301 响应——这正是此前静默发布空版本的根因。
+              # --location is required: after the upstream repo rename, api.github.com returns 301 for old paths (redirecting to /repositories/<id>/...),
+              # not following it yields a 301 response with no .workflow_runs — exactly the root cause of the earlier silent empty release.
               if out=$(curl -sS --location --max-redirs 5 "${GH_HDRS[@]}" -w $'\n%{http_code}' "$url" 2>/dev/null); then
                 http=$(printf '%s' "$out" | tail -n1)
                 body=$(printf '%s' "$out" | sed '$d')
                 if [ "$http" = "200" ] && printf '%s' "$body" | jq -e . >/dev/null 2>&1; then
                   printf '%s' "$body"; return 0
                 fi
-                echo "::warning::GitHub API $url 返回 HTTP ${http}（第 ${attempt} 次），重试中..." >&2
+                echo "::warning::GitHub API $url returned HTTP ${http} (attempt ${attempt}), retrying..." >&2
               else
-                echo "::warning::GitHub API $url 连接失败（第 ${attempt} 次），重试中..." >&2
+                echo "::warning::GitHub API $url connection failed (attempt ${attempt}), retrying..." >&2
               fi
               sleep $((attempt * 3))
             done
-            echo "::error::GitHub API 多次重试后仍失败: $url" >&2
+            echo "::error::GitHub API still failing after multiple retries: $url" >&2
             return 1
           }
 
@@ -159,13 +159,13 @@ jobs:
             *) LEGACY_RELEASE_TAG="" ;;
           esac
           if [ -n "$LEGACY_RELEASE_TAG" ]; then
-            echo "下载 ${{ inputs.kernelsu_variant }} 管理器..."
+            echo "Downloading ${{ inputs.kernelsu_variant }} manager..."
             mkdir -p "manager-artifacts/$LEGACY_DIR"
             MANAGER_URL=$(curl -fsSL "https://api.github.com/repos/zzh20188/GKI_KernelSU_SUSFS/releases/tags/$LEGACY_RELEASE_TAG" |
               jq -r '.assets[] | select(.name | startswith("SukiSU_") and endswith("-release.apk")) | .browser_download_url' |
               head -n 1)
             if [ -z "$MANAGER_URL" ]; then
-              echo "未找到 ${{ inputs.kernelsu_variant }} 管理器下载地址。"
+              echo "No download URL found for the ${{ inputs.kernelsu_variant }} manager."
               exit 1
             fi
             curl -fL -o "manager-artifacts/$LEGACY_DIR/${LEGACY_DIR}-release.apk" "$MANAGER_URL"
@@ -194,10 +194,10 @@ jobs:
           FILENAME=$([[ "${{ inputs.kernelsu_variant }}" == "Next" ]] && echo "build-manager-ci.yml" || echo "build-manager.yml")
 
 
-          # 按内核 KSU 版本选择 Manager，避免 APK 版本领先于内核版本
+          # Select the Manager by the kernel's KSU version, to avoid the APK version being ahead of the kernel version
           TARGET_KSU_VERSION="${KSU_VERSION:-}"
           if ! [[ "$TARGET_KSU_VERSION" =~ ^[0-9]+$ ]]; then
-            echo "无效的目标 KSU 版本: $TARGET_KSU_VERSION"
+            echo "Invalid target KSU version: $TARGET_KSU_VERSION"
             exit 1
           fi
 
@@ -243,28 +243,28 @@ jobs:
           if [ "${{ inputs.kernelsu_variant }}" == "Next" ]; then
             RUNS_URL="https://api.github.com/repos/$REPO/actions/workflows/$FILENAME/runs?branch=$BRANCH&status=success&per_page=30"
           elif [ "${{ inputs.kernelsu_variant }}" == "ReSukiSU" ]; then
-            # 只取 main 分支的 push 构建：不带过滤会选到 PR / 功能分支(如 renovate/*、fix-execve)的 Manager，
-            # 而内核是 main。必须同时限定 event=push，否则 fork 的 main 分支 PR 也会混进来。
+            # Only take push builds on the main branch: without the filter it would pick a Manager from a PR / feature branch (e.g. renovate/*, fix-execve),
+            # while the kernel is main. Must also restrict event=push, otherwise a fork's main-branch PR would slip in too.
             RUNS_URL="https://api.github.com/repos/$REPO/actions/workflows/$FILENAME/runs?branch=main&event=push&status=success&per_page=30"
           fi
 
-          echo "开始查找不高于 KSU $TARGET_KSU_VERSION 的 Manager 产物..."
+          echo "Searching for a Manager artifact not newer than KSU $TARGET_KSU_VERSION..."
           for PAGE in $(seq 1 10); do
             echo "--------------------------------------------------"
-            echo "正在检查第 ${PAGE} 页历史构建..."
+            echo "Checking build history page ${PAGE}..."
             if ! RUNS=$(gh_json "$RUNS_URL&page=$PAGE"); then
-              echo "::error::无法获取 $REPO 的构建列表（第 $PAGE 页）。中止，避免发布不含管理器的版本。"
+              echo "::error::Cannot fetch the build list for $REPO (page $PAGE). Aborting to avoid publishing a release without the manager."
               exit 1
             fi
-            # 必须是数组；错误对象不能被当成"0 条构建"而静默跳过（这正是上次静默失败的根因）。
+            # Must be an array; an error object must not be treated as "0 builds" and silently skipped (exactly the earlier silent failure).
             if [ "$(printf '%s' "$RUNS" | jq -r '.workflow_runs | type')" != "array" ]; then
-              echo "::error::构建列表响应异常（.workflow_runs 非数组）：$(printf '%s' "$RUNS" | head -c 300)"
+              echo "::error::Unexpected build-list response (.workflow_runs is not an array): $(printf '%s' "$RUNS" | head -c 300)"
               exit 1
             fi
             RUN_COUNT=$(printf '%s' "$RUNS" | jq '.workflow_runs | length')
             if [ "$RUN_COUNT" -eq 0 ]; then
               if [ "$PAGE" -eq 1 ]; then
-                echo "::error::$REPO 的 $FILENAME 过滤后无任何成功构建（检查分支/事件过滤与令牌权限）。"
+                echo "::error::$REPO has no successful builds of $FILENAME after filtering (check branch/event filters and token permissions)."
                 exit 1
               fi
               break
@@ -277,21 +277,21 @@ jobs:
 
               RUN_KSU_VERSION=$(calculate_run_ksu_version "$HEAD_SHA" || true)
               if ! [[ "$RUN_KSU_VERSION" =~ ^[0-9]+$ ]]; then
-                echo "跳过构建 $BUILD_ID: 无法根据提交 $HEAD_SHA 计算 KSU 版本"
+                echo "Skipping build $BUILD_ID: cannot compute KSU version from commit $HEAD_SHA"
                 continue
               fi
               if [ "$RUN_KSU_VERSION" -gt "$TARGET_KSU_VERSION" ]; then
-                echo "跳过构建 $BUILD_ID ($HEAD_BRANCH): Manager KSU $RUN_KSU_VERSION 高于内核 KSU $TARGET_KSU_VERSION"
+                echo "Skipping build $BUILD_ID ($HEAD_BRANCH): Manager KSU $RUN_KSU_VERSION is higher than kernel KSU $TARGET_KSU_VERSION"
                 continue
               fi
 
               if ! ARTIFACTS=$(gh_json "https://api.github.com/repos/$REPO/actions/runs/$BUILD_ID/artifacts?per_page=100"); then
-                echo "跳过构建 $BUILD_ID: 无法获取产物列表"
+                echo "Skipping build $BUILD_ID: cannot fetch artifact list"
                 continue
               fi
               CANDIDATE_LIST=$(get_manager_artifacts "$ARTIFACTS")
               if [ -z "$CANDIDATE_LIST" ]; then
-                echo "跳过构建 $BUILD_ID ($HEAD_BRANCH): 未找到包含 '$KSUM' 的产物"
+                echo "Skipping build $BUILD_ID ($HEAD_BRANCH): no artifact containing '$KSUM' found"
                 continue
               fi
 
@@ -300,7 +300,7 @@ jobs:
                 BEST_VERSION="$RUN_KSU_VERSION"
                 BEST_BUILD_ID="$BUILD_ID"
                 BEST_BRANCH="$HEAD_BRANCH"
-                echo "候选 Manager: 构建 $BUILD_ID ($HEAD_BRANCH), KSU $RUN_KSU_VERSION"
+                echo "Candidate Manager: build $BUILD_ID ($HEAD_BRANCH), KSU $RUN_KSU_VERSION"
               fi
 
               if [ "$RUN_KSU_VERSION" -eq "$TARGET_KSU_VERSION" ]; then
@@ -310,25 +310,25 @@ jobs:
           done
 
           if [ -z "$DOWNLOAD_LIST" ]; then
-            echo "未获取到 KSU 版本小于等于 $TARGET_KSU_VERSION 的 Manager artifact 下载地址列表。"
+            echo "No Manager artifact download URL found with KSU version <= $TARGET_KSU_VERSION."
             exit 1
           fi
-          echo "选择 Manager 构建 $BEST_BUILD_ID ($BEST_BRANCH), KSU $BEST_VERSION"
+          echo "Selected Manager build $BEST_BUILD_ID ($BEST_BRANCH), KSU $BEST_VERSION"
 
-          # 注意：用 here-string 而非管道，避免 while 进入子 shell 导致下载失败时 exit 1 无法中止本步骤。
+          # Note: use a here-string, not a pipe, so the while loop does not run in a subshell and a download failure's exit 1 can abort this step.
           while IFS=$'\t' read -r NAME URL; do
             [ -z "$NAME" ] && continue
             SAFE_NAME=$(echo "$NAME" | tr '/ ' '__')
             ZIP_NAME="${{ inputs.kernelsu_variant }}-${SAFE_NAME}(${{ env.KSU_VERSION }}).zip"
-            echo "下载 $NAME -> $ZIP_NAME"
+            echo "Downloading $NAME -> $ZIP_NAME"
             if ! curl -sS --fail-with-body --location --retry 3 --retry-all-errors \
                  --retry-delay 2 --connect-timeout 15 --max-time 300 \
                  "${GH_HDRS[@]}" -o "$ZIP_NAME" "$URL"; then
-              echo "::error::下载 Manager 产物失败：$NAME。若为跨仓库 403，请在 Secrets 配置具 actions:read 的 GH_PAT。"
+              echo "::error::Failed to download Manager artifact: $NAME. If this is a cross-repo 403, configure a GH_PAT with actions:read in Secrets."
               exit 1
             fi
             if ! unzip -tq "$ZIP_NAME" >/dev/null 2>&1; then
-              echo "::error::下载的产物不是有效 zip（可能是错误响应）：$NAME"
+              echo "::error::Downloaded artifact is not a valid zip (possibly an error response): $NAME"
               head -c 300 "$ZIP_NAME" || true
               exit 1
             fi
@@ -338,17 +338,17 @@ jobs:
           done <<< "$DOWNLOAD_LIST"
 
           if [ "${{ inputs.kernelsu_variant }}" == "ReSukiSU" ]; then
-            echo "仅保留 ReSukiSU arm64-v8a release 管理器..."
+            echo "Keeping only the ReSukiSU arm64-v8a release manager..."
             find manager-artifacts -type f -name "*.apk" ! -name "*-arm64-v8a-release.apk" -delete
             find manager-artifacts -type f -name "*debug*.apk" -delete
             if ! find manager-artifacts -type f -name "*-arm64-v8a-release.apk" | grep -q .; then
-              echo "未找到 ReSukiSU arm64-v8a release 管理器。"
+              echo "No ReSukiSU arm64-v8a release manager found."
               exit 1
             fi
             find manager-artifacts -type f -name "*.apk" -print
           fi
 
-      - name: 添加 SUSFS 模块
+      - name: Add SUSFS module
         id: add_SUSFS
         continue-on-error: true
         run: |
@@ -360,7 +360,7 @@ jobs:
             *) LEGACY_RELEASE_TAG="" ;;
           esac
           if [ -n "$LEGACY_RELEASE_TAG" ]; then
-            echo "下载 ${{ inputs.kernelsu_variant }} 对应的 SUSFS 模块..."
+            echo "Downloading the SUSFS module for ${{ inputs.kernelsu_variant }}..."
             mkdir -p susfs-module
             curl -fL -o susfs-module/ksu_module_susfs.zip \
               "https://github.com/zzh20188/GKI_KernelSU_SUSFS/releases/download/$LEGACY_RELEASE_TAG/ksu_module_susfs.zip"
@@ -375,12 +375,12 @@ jobs:
           WORKDIR=$(mktemp -d)
           trap 'rm -rf "$WORKDIR"' EXIT
 
-          # 响应先写入文件，避免重试时将多份响应拼接成无效 JSON。
+          # Write the response to a file first, to avoid concatenating multiple responses into invalid JSON on retry.
           github_api() {
             : > "$WORKDIR/api.json"
             if ! curl "${CURL_ARGS[@]}" -H "Authorization: Bearer $GH_TOKEN" \
               -o "$WORKDIR/api.json" "$1"; then
-              echo "::error::GitHub API 请求重试后仍失败: $1" >&2
+              echo "::error::GitHub API request still failing after retries: $1" >&2
               if [ -s "$WORKDIR/api.json" ]; then
                 cat "$WORKDIR/api.json" >&2
               fi
@@ -391,10 +391,10 @@ jobs:
 
           RUNS=$(github_api "$API_ROOT/actions/workflows/build.yml/runs?status=success&per_page=30")
           if ! BUILD_IDS=$(jq -er '
-            .workflow_runs | if type != "array" then error("构建列表不是数组")
+            .workflow_runs | if type != "array" then error("build list is not an array")
             else .[] | .id | select(type == "number" and . > 0 and . == floor) end
           ' <<< "$RUNS"); then
-            echo "::error::SUSFS 构建列表无效或没有成功构建" >&2
+            echo "::error::SUSFS build list is invalid or has no successful builds" >&2
             exit 1
           fi
 
@@ -403,7 +403,7 @@ jobs:
           while IFS= read -r BUILD_ID; do
             ARTIFACTS=$(github_api "$API_ROOT/actions/runs/$BUILD_ID/artifacts?per_page=100")
             if ! CANDIDATE=$(jq -c --arg prefix "$API_ROOT/actions/artifacts/" '
-              if (.artifacts | type) != "array" then error("产物列表不是数组")
+              if (.artifacts | type) != "array" then error("artifact list is not an array")
               else [.artifacts[]
                 | select(.expired == false)
                 | select(.name | strings | test("^[^\\r\\n]+$"))
@@ -411,21 +411,21 @@ jobs:
                 | select(.archive_download_url | ltrimstr($prefix) | test("^[1-9][0-9]*/zip$"))
               ][0] // empty end
             ' <<< "$ARTIFACTS"); then
-              echo "::error::SUSFS 构建 $BUILD_ID 的产物列表无效" >&2
+              echo "::error::Artifact list for SUSFS build $BUILD_ID is invalid" >&2
               exit 1
             fi
             if [ -z "$CANDIDATE" ]; then
-              echo "::warning::SUSFS 构建 $BUILD_ID 没有可用产物，继续检查历史构建"
+              echo "::warning::SUSFS build $BUILD_ID has no usable artifacts, continuing to check build history"
               continue
             fi
             NAME=$(jq -r '.name' <<< "$CANDIDATE")
             DOWNLOAD_URL=$(jq -r '.archive_download_url' <<< "$CANDIDATE")
-            echo "选择 SUSFS 模块: 构建 $BUILD_ID，产物 $NAME"
+            echo "Selected SUSFS module: build $BUILD_ID, artifact $NAME"
             break
           done <<< "$BUILD_IDS"
 
           if [ -z "$DOWNLOAD_URL" ]; then
-            echo "::error::最近 30 次成功构建中没有未过期且下载地址有效的 SUSFS 模块产物" >&2
+            echo "::error::None of the last 30 successful builds has an unexpired SUSFS module artifact with a valid download URL" >&2
             exit 1
           fi
 
@@ -442,21 +442,21 @@ jobs:
             (cd "$WORKDIR/extracted" && zip -qr "$WORKDIR/module/ksu_module_susfs.zip" .)
           fi
 
-          # 成功后再替换输出目录，重复执行时不残留旧模块或不完整下载。
+          # Replace the output directory only after success, so repeated runs do not leave old modules or incomplete downloads.
           rm -rf susfs-module
           mv "$WORKDIR/module" susfs-module
           echo "SUSFS_NAME=$NAME" >> "$GITHUB_ENV"
-          echo "SUSFS 模块已下载并整理完成"
+          echo "SUSFS module downloaded and organized"
 
-      - name: 提示 SUSFS 模块下载失败
+      - name: Report SUSFS module download failure
         if: steps.add_SUSFS.outcome == 'failure'
-        run: echo "::warning::SUSFS 模块下载失败，本次不附带模块 ZIP；不影响 Manager APK 和内核构建。"
+        run: echo "::warning::SUSFS module download failed; no module ZIP this time; does not affect the Manager APK or the kernel build."
 
       - name: Notify on failure
         if: steps.add_KSU.outcome == 'failure'
-        run: echo "下载CI构建的KSU失败!"
+        run: echo "Failed to download the CI-built KSU!"
 
-      - name: 上传APK
+      - name: Upload APK
         if: steps.add_KSU.outcome == 'success'
         uses: actions/upload-artifact@v6
         with:
@@ -464,7 +464,7 @@ jobs:
           path: |
             manager-artifacts/**/*.apk
 
-      - name: 上传SUSFS模块
+      - name: Upload SUSFS module
         if: steps.add_SUSFS.outcome == 'success'
         uses: actions/upload-artifact@v6
         with:
