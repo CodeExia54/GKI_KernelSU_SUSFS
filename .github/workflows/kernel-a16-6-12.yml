@@ -183,12 +183,13 @@ jobs:
         include:
           - sub_level: "23"
             os_patch_level: "2025-06"
-          - sub_level: "30"
-            os_patch_level: "2025-07"
-          - sub_level: "38"
-            os_patch_level: "2025-09"
-          - sub_level: "58"
-            os_patch_level: "2025-12"
+          # 仅构建 6.12.23（ASUS AI2205 原厂内核）；其余子版本按需取消注释
+          # - sub_level: "30"
+          #   os_patch_level: "2025-07"
+          # - sub_level: "38"
+          #   os_patch_level: "2025-09"
+          # - sub_level: "58"
+          #   os_patch_level: "2025-12"
           # - sub_level: "X"
           #   os_patch_level: "lts"
     uses: ./.github/workflows/build.yml
