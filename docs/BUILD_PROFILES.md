@@ -76,6 +76,49 @@ own versionCode formula) — whether it has the same strict equality gate
 hasn't been checked yet. Verify against `Baka-SU/BakaSU`'s own manager
 source before assuming it behaves like SukiSU's.
 
+## Disguised/spoofed manager apps (random package name) not getting recognized at all
+
+Separate issue from the UAPI version gate above, and easy to confuse with it: a manager APK built by the
+`Manager-spoofed` pipeline (package name randomized to 3-4 random words, see `SukiSU-Ultra/SukiSU-Ultra`'s
+`build-manager.yml` "Run randomizer" step) can show "No SukiSU kernel detected / preview mode" even on a
+perfectly correct, matching-UAPI kernel. Root (`su`) still works fine in this state — it's specifically the
+app's own "am I the manager" check that fails, a different code path from plain root.
+
+Root cause, confirmed 2026-11-01 by reading `kernel/manager/throne_tracker.c` + `apk_sign.c` and
+`kernel/extension/dynamic_sig_fallback.c` in `SukiSU-Ultra/SukiSU-Ultra`:
+
+- The kernel hardcodes trusted manager signing-certificate SHA-256 hashes (`apk_sign.c`'s `apk_sign_keys[]`,
+  one per supported root project). A spoofed APK's signature is still one of these valid hashes — spoofing
+  only renames the package, it doesn't re-sign with a different key.
+- But `track_throne()`'s default path only ever *checks* an app's signature if that app's package name
+  exactly equals the compile-time constant `KSU_PACKAGE_NAME` (`kernel/Makefile`, defaults to
+  `com.sukisu.ultra`; this repo's `build.yml` never overrides it). A randomly-named spoofed app is skipped
+  before its signature is ever examined.
+- There's a disabled-by-default kernel extension, `dynamic_manager` (the "signature fallback"), made for
+  exactly this: it re-scans `/data/app` and crowns *any* app with a trusted signature, regardless of package
+  name.
+
+**Fix procedure** (do all of this, in order — skipping any step leaves it broken):
+
+1. Make sure the plain, un-spoofed manager (`com.sukisu.ultra`) is **not installed**. If it is, remove it —
+   `track_throne()` always prefers an exact `KSU_PACKAGE_NAME` match when one exists and never even attempts
+   the fallback scan in that case.
+2. `adb shell su -c "/data/adb/ksu/bin/ksud extension set dynamic_manager 1"` then
+   `... ksud extension save` — `set` alone does not survive reboot despite the extension claiming
+   `persist=1`; `save` writes it to `/data/adb/ksu/.extension_config`.
+3. Re-run the scan: `adb shell su -c "/data/adb/ksu/bin/ksud post-fs-data"` (or just reboot).
+4. **The scan locks onto the first validly-signed APK it finds under `/data/app` and caches that choice
+   permanently** ("manager uid=X still installed, skip search!" in dmesg on every later run) — so any other
+   old spoofed manager APK from a previous build/session, still installed, will win the race if the kernel
+   happens to enumerate it first. Find and uninstall every other app sharing the SukiSU signing cert before
+   expecting the current one to get picked. To see exactly what got crowned and why:
+   `adb shell su -c "dmesg | grep -iE 'sig_fallback|crowning|manager uid'"`.
+5. Force-stop and relaunch the manager app. It should now show "Built-in — Working — Version: <ksuVer>".
+
+None of this needs a kernel rebuild — it's entirely on-device, post-flash configuration. `ksud debug
+set-manager <pkg>` looks like a shortcut for steps 1-4 but requires `CONFIG_KSU_DEBUG`, deliberately not
+enabled in a production kernel build — don't reach for it as the "real" fix.
+
 ## Known pitfalls (hit and fixed 2026-11-01, keep an eye out for recurrence)
 
 1. **Floating `lts`/`X` sublevel can drift ahead of SUSFS's patch base.**
