@@ -1,0 +1,57 @@
+# ==================== Build profile: bakasu-default ====================
+# STARTING POINT, NOT YET VALIDATED — no BakaSU build has actually been
+# run from this repo yet. Fields below are the closest-known-sane
+# defaults; adjust and re-save before relying on this.
+#
+# Known real facts about the BakaSU variant (from build.yml / get-manager.yml,
+# verified by reading the workflow source, not assumed):
+#   - Always builds from the "main" branch (no "builtin" split like SukiSU
+#     has for enable_susfs) — see build.yml "Official"|"BakaSU" case.
+#   - Sourced from https://github.com/Baka-SU/BakaSU (its own repo, NOT a
+#     SukiSU-Ultra fork) — separate from SukiSU entirely.
+#   - Has its OWN separate manager APK, also built from Baka-SU/BakaSU,
+#     with its own versionCode formula (30700 + commit count) — install
+#     the BakaSU manager app, not the SukiSU one, for this variant.
+#   - Supports KPM (use_kpm=enabled) and SUSFS export, same as SukiSU.
+#   - KPM "patched" mode is unimplemented for every variant, same caveat
+#     as SukiSU — leave use_kpm on "enabled", not "patched".
+#   - Known kernel-side bug: sublevels 5.15.74 through 5.15.137 need an
+#     extra CONFIG_KALLSYMS/CONFIG_KALLSYMS_ALL workaround for a
+#     kallsyms_on_each_symbol/LIVEPATCH linking failure specific to
+#     BakaSU — build.yml already applies this automatically in that
+#     sublevel range, nothing to configure here.
+#   - UNKNOWN / not yet checked: whether BakaSU's manager has the same
+#     strict kernelUAPIVersion==managerUAPIVersion equality gate that
+#     SukiSU's does (see docs/BUILD_PROFILES.md). Check BakaSU's own
+#     manager source before assuming it behaves the same way.
+# =========================================================================
+
+android_version=android13
+kernel_version=5.15
+# Reusing the same real, recently-validated sublevel as exia-206 as a
+# starting point (known-stable SUSFS-patch source) — change this to
+# match whatever target device this profile is actually built for.
+sub_level=206
+os_patch_level=2026-06
+
+kernelsu_variant=BakaSU
+ksu_mode=关闭
+use_kpm=enabled (开启)
+
+use_zram=false
+use_bbg=false
+use_rekernel=false
+use_nomount=false
+use_networking=false
+cve_2026_43499_patch=false
+droidspaces=off
+droidspaces_ntsync=false
+
+# No specific device to match yet — leave blank for an auto-generated
+# version/build_time, or fill in once a target device is picked.
+version=
+build_time=
+
+artifact_upload_mode=上传全部
+# No stock_defconfig captured for a BakaSU target device yet.
+stock_defconfig=

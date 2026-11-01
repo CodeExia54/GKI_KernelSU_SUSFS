@@ -1,0 +1,52 @@
+# ==================== Build profile: exia-206 ====================
+# CodeExia's ASUS ROG phone (ASUS_AI2205_C / WW_AI2205), Android 15.
+# Traced to the exact stock kernel source: the stock boot.img's version
+# string hash (g3f87b8704e9e) matches a commit on tag
+# android13-5.15-2026-06_r3 of https://android.googlesource.com/kernel/common,
+# confirmed SUBLEVEL=206 there. So this is a REAL sublevel, not a spoof.
+#
+# Validated working 2026-11-01 (GitHub Actions run 41283133265): SUSFS
+# patch applied cleanly, kernel compiled, KPM/zram/bbg all baked in
+# without error. See docs/BUILD_PROFILES.md for how this was derived
+# and known pitfalls (floating lts branch SUSFS-patch drift, old pinned
+# SukiSU commits missing the uapi_version protocol field, etc).
+#
+# Manager compatibility: SukiSU-Ultra manager requires
+# kernelUAPIVersion == managerUAPIVersion exactly (not >=). Keep
+# kernelsu_variant unpinned ("SukiSU", tracks builtin HEAD) so it stays
+# in sync with whatever manager APK build is currently installed,
+# unless a specific regression forces a temporary pin again.
+# ====================================================================
+
+android_version=android13
+kernel_version=5.15
+sub_level=206
+os_patch_level=2026-06
+# build.yml's source_ref input pins the kernel/common repo to this exact
+# upstream tag, so the source matches the stock kernel commit-for-commit
+# (not just "same sublevel") — this is the tag whose dereferenced commit
+# hash (g3f87b8704e9e...) matches the stock boot.img's version string.
+source_ref=android13-5.15-2026-06_r3
+
+kernelsu_variant=SukiSU
+ksu_mode=关闭
+use_kpm=enabled (开启)
+
+use_zram=true
+use_bbg=true
+use_rekernel=false
+use_nomount=false
+use_networking=false
+cve_2026_43499_patch=false
+droidspaces=off
+droidspaces_ntsync=false
+
+# Full original stock version string; build.yml strips the leading
+# X.Y.Z automatically and keeps the rest as LOCALVERSION.
+version=5.15.206-android13-8-00056-g3f87b8704e9e-ab15683575
+# Original stock build timestamp (must match build.yml's strict
+# "Day Mon DD HH:MM:SS UTC YYYY" regex).
+build_time=Wed Jun 17 04:35:03 UTC 2026
+
+artifact_upload_mode=上传全部
+stock_defconfig=config/stock/android13-5.15-2026-06.config

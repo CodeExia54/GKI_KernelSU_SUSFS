@@ -1,0 +1,145 @@
+name: Build from profile
+
+# Builds exactly ONE kernel target from a named profile file in
+# config/profiles/, instead of the hardcoded 20-sublevel matrix that
+# kernel-a13-5-15.yml (and the other kernel-aNN-*.yml workflows) run.
+# See docs/BUILD_PROFILES.md for what a profile is and how to add one.
+
+on:
+  workflow_dispatch:
+    inputs:
+      profile:
+        description: "Profile name (a file at config/profiles/<name>.yml)"
+        required: true
+        type: choice
+        options:
+          - exia-206
+          - bakasu-default
+        default: exia-206
+
+permissions:
+  contents: write
+  actions: write
+
+jobs:
+  load-profile:
+    runs-on: ubuntu-24.04
+    outputs:
+      android_version: ${{ steps.read.outputs.android_version }}
+      kernel_version: ${{ steps.read.outputs.kernel_version }}
+      sub_level: ${{ steps.read.outputs.sub_level }}
+      os_patch_level: ${{ steps.read.outputs.os_patch_level }}
+      source_ref: ${{ steps.read.outputs.source_ref }}
+      kernelsu_variant: ${{ steps.read.outputs.kernelsu_variant }}
+      ksu_mode: ${{ steps.read.outputs.ksu_mode }}
+      enable_susfs: ${{ steps.read.outputs.enable_susfs }}
+      use_kpm: ${{ steps.read.outputs.use_kpm }}
+      use_zram: ${{ steps.read.outputs.use_zram }}
+      use_bbg: ${{ steps.read.outputs.use_bbg }}
+      use_rekernel: ${{ steps.read.outputs.use_rekernel }}
+      use_nomount: ${{ steps.read.outputs.use_nomount }}
+      use_networking: ${{ steps.read.outputs.use_networking }}
+      cve_2026_43499_patch: ${{ steps.read.outputs.cve_2026_43499_patch }}
+      droidspaces: ${{ steps.read.outputs.droidspaces }}
+      droidspaces_ntsync: ${{ steps.read.outputs.droidspaces_ntsync }}
+      version: ${{ steps.read.outputs.version }}
+      build_time: ${{ steps.read.outputs.build_time }}
+      artifact_upload_mode: ${{ steps.read.outputs.artifact_upload_mode }}
+      stock_defconfig: ${{ steps.read.outputs.stock_defconfig }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Read profile
+        id: read
+        run: |
+          set -euo pipefail
+          PROFILE_FILE="config/profiles/${{ inputs.profile }}.yml"
+          if [ ! -f "$PROFILE_FILE" ]; then
+            echo "::error::No such profile file: $PROFILE_FILE"
+            exit 1
+          fi
+          echo "Using profile: $PROFILE_FILE"
+          cat "$PROFILE_FILE"
+
+          # plain key=value lines, '#' comments and blank lines ignored,
+          # value may contain '=' so only split on the first one.
+          get() {
+            grep -E "^$1=" "$PROFILE_FILE" | head -n1 | cut -d'=' -f2- || true
+          }
+
+          {
+            echo "android_version=$(get android_version)"
+            echo "kernel_version=$(get kernel_version)"
+            echo "sub_level=$(get sub_level)"
+            echo "os_patch_level=$(get os_patch_level)"
+            echo "source_ref=$(get source_ref)"
+            echo "kernelsu_variant=$(get kernelsu_variant)"
+            echo "ksu_mode=$(get ksu_mode)"
+            echo "use_kpm=$(get use_kpm)"
+            echo "use_zram=$(get use_zram)"
+            echo "use_bbg=$(get use_bbg)"
+            echo "use_rekernel=$(get use_rekernel)"
+            echo "use_nomount=$(get use_nomount)"
+            echo "use_networking=$(get use_networking)"
+            echo "cve_2026_43499_patch=$(get cve_2026_43499_patch)"
+            echo "droidspaces=$(get droidspaces)"
+            echo "droidspaces_ntsync=$(get droidspaces_ntsync)"
+            echo "version=$(get version)"
+            echo "build_time=$(get build_time)"
+            echo "artifact_upload_mode=$(get artifact_upload_mode)"
+            echo "stock_defconfig=$(get stock_defconfig)"
+          } >> "$GITHUB_OUTPUT"
+
+          # mirrors the enable_susfs derivation kernel-a13-5-15.yml etc. do
+          # from ksu_mode, since this workflow calls build.yml directly.
+          KSU_MODE="$(get ksu_mode)"
+          if [ "$KSU_MODE" == "禁用SUSFS" ] || [ "$KSU_MODE" == "禁用KSU" ]; then
+            echo "enable_susfs=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "enable_susfs=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install this profile's stock_defconfig
+        if: steps.read.outputs.stock_defconfig != ''
+        run: |
+          SRC="${{ steps.read.outputs.stock_defconfig }}"
+          if [ ! -f "$SRC" ]; then
+            echo "::warning::Profile references stock_defconfig=$SRC but that file doesn't exist, skipping"
+            exit 0
+          fi
+          if [ "$SRC" != "config/stock_defconfig" ]; then
+            cp "$SRC" config/stock_defconfig
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add config/stock_defconfig
+            if ! git diff --cached --quiet; then
+              git commit -m "ci: install ${{ inputs.profile }}'s stock_defconfig for this build"
+              git push
+            fi
+          fi
+
+  build:
+    needs: load-profile
+    uses: ./.github/workflows/build.yml
+    secrets: inherit
+    with:
+      android_version: ${{ needs.load-profile.outputs.android_version }}
+      kernel_version: ${{ needs.load-profile.outputs.kernel_version }}
+      sub_level: ${{ needs.load-profile.outputs.sub_level }}
+      os_patch_level: ${{ needs.load-profile.outputs.os_patch_level }}
+      source_ref: ${{ needs.load-profile.outputs.source_ref }}
+      ksu_variant: ${{ needs.load-profile.outputs.kernelsu_variant }}
+      ksu_mode: ${{ needs.load-profile.outputs.ksu_mode }}
+      enable_susfs: ${{ needs.load-profile.outputs.enable_susfs == 'true' }}
+      use_kpm: ${{ needs.load-profile.outputs.use_kpm }}
+      use_zram: ${{ needs.load-profile.outputs.use_zram == 'true' }}
+      use_bbg: ${{ needs.load-profile.outputs.use_bbg == 'true' }}
+      use_rekernel: ${{ needs.load-profile.outputs.use_rekernel == 'true' }}
+      use_nomount: ${{ needs.load-profile.outputs.use_nomount == 'true' }}
+      use_networking: ${{ needs.load-profile.outputs.use_networking == 'true' }}
+      cve_2026_43499_patch: ${{ needs.load-profile.outputs.cve_2026_43499_patch == 'true' }}
+      droidspaces: ${{ needs.load-profile.outputs.droidspaces }}
+      droidspaces_ntsync: ${{ needs.load-profile.outputs.droidspaces_ntsync == 'true' }}
+      version: ${{ needs.load-profile.outputs.version }}
+      build_time: ${{ needs.load-profile.outputs.build_time }}
+      artifact_upload_mode: ${{ needs.load-profile.outputs.artifact_upload_mode }}
