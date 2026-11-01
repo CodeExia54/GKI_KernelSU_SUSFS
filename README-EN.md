@@ -12,6 +12,9 @@
 
 English | [**简体中文**](README.md)
 
+### 🛠️ [**▶ Open the Build Console**](https://codeexia54.github.io/GKI_KernelSU_SUSFS/console.html)
+One page to launch kernel / LKM builds, patch `init_boot.img` (upload → patch → download), and watch upstream root updates — no token required (or one-click with a token).
+
 ---
 
 </div>

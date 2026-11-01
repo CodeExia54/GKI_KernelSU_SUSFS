@@ -12,6 +12,9 @@
 
 [**English**](README-EN.md) | 简体中文
 
+### 🛠️ [**▶ 打开在线构建控制台 (Build Console)**](https://codeexia54.github.io/GKI_KernelSU_SUSFS/console.html)
+一个页面搞定：内核 / LKM 构建、init_boot 在线打补丁（上传→打补丁→下载）、查看上游 root 更新 — 无需 token（有 token 可一键触发）。
+
 ---
 
 </div>

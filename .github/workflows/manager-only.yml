@@ -1,0 +1,101 @@
+name: Manager-only build (test, no kernel)
+
+# Only run get-manager (pull the manager from the upstream official CI; for ReSukiSU it fetches both the normal and the Spoofed random-package-name build),
+# then publish the APK to a prerelease Release. Used to quickly verify get-manager.yml's fetch logic without compiling a full kernel.
+
+permissions:
+  contents: write
+  actions: read
+
+on:
+  workflow_dispatch:
+    inputs:
+      kernelsu_variant:
+        description: "KernelSU variant"
+        type: choice
+        default: ReSukiSU
+        options:
+          - ReSukiSU
+          - SukiSU
+          - Next
+          - Official
+      publish_release:
+        description: "Publish the APK to a Release"
+        type: boolean
+        default: true
+
+jobs:
+  get-ksu-manager:
+    uses: ./.github/workflows/get-manager.yml
+    secrets: inherit
+    with:
+      kernelsu_variant: ${{ inputs.kernelsu_variant }}
+
+  release-manager:
+    needs: get-ksu-manager
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - name: Download Manager artifacts
+        uses: actions/download-artifact@v8
+        with:
+          pattern: "${{ inputs.kernelsu_variant }}-Manager*"
+          path: dl
+          merge-multiple: true
+
+      - name: Organize APKs (distinguish normal / Spoofed)
+        id: collect
+        run: |
+          set -euo pipefail
+          echo "Kernel-side KSU version: ${{ needs.get-ksu-manager.outputs.ksuVer }}"
+          echo "SUSFS version:      ${{ needs.get-ksu-manager.outputs.susVer }}"
+          echo "Downloaded content:"
+          find dl -type f -print || true
+
+          mkdir -p out
+          # ReSukiSU's normal and Spoofed arm64 APKs share the same file name and differ only by their containing subdirectory,
+          # so rename by parent directory before publishing to avoid Release asset name collisions.
+          while IFS= read -r f; do
+            parent="$(basename "$(dirname "$f")")"
+            base="$(basename "$f")"
+            case "$parent" in
+              *Spoofed*) newname="${base%.apk}-spoofed.apk" ;;
+              *)         newname="$base" ;;
+            esac
+            # If still duplicated, append the parent directory name to guarantee uniqueness
+            [ -e "out/$newname" ] && newname="${parent}-${newname}"
+            cp -f "$f" "out/$newname"
+          done < <(find dl -type f -name "*.apk")
+
+          count=$(find out -type f -name "*.apk" | wc -l)
+          echo "Organized $count APKs in total:"
+          find out -type f -name "*.apk" -printf '  %f\n' | sort
+          if [ "$count" -eq 0 ]; then
+            echo "::error::No APK found — manager fetch failed (see the get-ksu-manager log)."
+            exit 1
+          fi
+          echo "count=$count" >> "$GITHUB_OUTPUT"
+
+      - name: Publish Release
+        if: ${{ inputs.publish_release }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          VAR="${{ inputs.kernelsu_variant }}"
+          KSUVER="${{ needs.get-ksu-manager.outputs.ksuVer }}"
+          TAG="manager-${VAR}-${KSUVER}"
+          mapfile -t APKS < <(find out -type f -name "*.apk" | sort)
+          NOTES="Manager-only test build (no kernel). Variant: ${VAR}, KSU: ${KSUVER}. ReSukiSU includes the normal and Spoofed (random package name) arm64 managers."
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release $TAG already exists, overwriting assets..."
+            gh release upload "$TAG" "${APKS[@]}" --clobber --repo "$GITHUB_REPOSITORY"
+          else
+            gh release create "$TAG" "${APKS[@]}" \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "Manager ${VAR} (KSU ${KSUVER})" \
+              --notes "$NOTES" \
+              --prerelease
+          fi
+          echo "Published: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/releases/tag/${TAG}"

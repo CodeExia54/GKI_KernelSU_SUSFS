@@ -2,7 +2,7 @@ name: Update Data & Deploy Pages
 
 on:
   schedule:
-    - cron: '0 8 */3 * *'  # 每 3 天 UTC 8:00
+    - cron: '0 8 */3 * *'  # every 3 days at 08:00 UTC
   workflow_dispatch:
   push:
     branches: [dev]
@@ -10,7 +10,7 @@ on:
       - 'data/**'
       - 'web/**'
       - 'scripts/**'
-      # scripts/susfs_fixes/ 是构建期由 build.yml 调用的补丁修复脚本，与版本数据抓取无关
+      # scripts/susfs_fixes/ holds build-time patch-fix scripts called by build.yml, unrelated to version-data scraping
       - '!scripts/susfs_fixes/**'
 
 permissions:
@@ -77,7 +77,7 @@ jobs:
       - name: Copy data to web directory
         run: cp -r data/ web/data/
 
-      # 构建前端资源（webpack 打包 JS/SCSS → dist/）
+      # Build the frontend assets (webpack bundles JS/SCSS → dist/)
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
@@ -86,7 +86,7 @@ jobs:
         working-directory: web
         run: npm ci && npx webpack --mode production
 
-      # Pages 产物只需要页面、dist/、data/ 与 assets/，node_modules 有 40MB 以上，上传前清掉
+      # Pages artifacts only need the page, dist/, data/ and assets/; node_modules is 40MB+, clean it before upload
       - name: Trim Pages artifact
         run: rm -rf web/node_modules
 

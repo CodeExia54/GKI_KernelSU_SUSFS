@@ -1,0 +1,704 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kernel Build Console</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;700&family=Roboto+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0f1318; --elevated:#171c23; --panel:#1d232b; --panel2:#151a21;
+    --border:#2a3140; --border-sub:#222938;
+    --fg:#e2e8f0; --fg2:#94a3b8; --muted:#64748b;
+    --accent:#3ddc84; --accent-dim:#2bb06a; --accent-bg:rgba(61,220,132,.08);
+    --accent-bg-h:rgba(61,220,132,.14); --accent-border:rgba(61,220,132,.22);
+    --accent2:#60a5fa; --accent2-bg:rgba(96,165,250,.1);
+    --warn:#f59e0b; --warn-bg:rgba(245,158,11,.12); --warn-border:rgba(245,158,11,.28);
+    --err:#ef4444; --ok:#3ddc84; --chip:#151a21;
+    --shadow:0 2px 8px rgba(0,0,0,.25),0 1px 2px rgba(0,0,0,.2);
+    --shadow-lg:0 14px 34px rgba(0,0,0,.36),0 4px 8px rgba(0,0,0,.2);
+    --radius:14px; --radius-sm:9px;
+    --mono:"Roboto Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    --sans:"Google Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;
+    --header:linear-gradient(135deg,#1a2332 0%,#151d2b 100%);
+  }
+  :root[data-theme="light"]{
+    --bg:#f1f5f9;--elevated:#fff;--panel:#fff;--panel2:#f8fafc;
+    --border:#e2e8f0;--border-sub:#f1f5f9;
+    --fg:#0f172a;--fg2:#475569;--muted:#94a3b8;
+    --accent:#16a34a;--accent-dim:#15803d;--accent-bg:rgba(22,163,74,.06);
+    --accent-bg-h:rgba(22,163,74,.1);--accent-border:rgba(22,163,74,.22);
+    --accent2:#2563eb;--accent2-bg:rgba(37,99,235,.06);
+    --warn:#b45309;--warn-bg:rgba(245,158,11,.12);--warn-border:rgba(245,158,11,.28);
+    --err:#dc2626;--ok:#16a34a;--chip:#f1f5f9;
+    --shadow:0 1px 3px rgba(0,0,0,.08),0 1px 2px rgba(0,0,0,.04);
+    --shadow-lg:0 8px 24px rgba(0,0,0,.12),0 2px 4px rgba(0,0,0,.06);
+    --header:linear-gradient(135deg,#fff 0%,#f4f8f5 100%);
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--sans);font-size:14px;line-height:1.55;
+    -webkit-font-smoothing:antialiased}
+  a{color:var(--accent2);text-decoration:none}
+  a:hover{text-decoration:underline}
+  .topbar{background:var(--header);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:10;
+    box-shadow:var(--shadow)}
+  .topbar .inner{max-width:1040px;margin:0 auto;padding:14px 18px;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+  .brand{display:flex;align-items:center;gap:10px}
+  .logo{width:34px;height:34px;border-radius:10px;background:var(--accent-bg);border:1px solid var(--accent-border);
+    display:grid;place-items:center;font-size:18px}
+  .brand h1{font-size:17px;margin:0;font-weight:700;letter-spacing:-.3px}
+  .brand .tagline{font-size:11px;color:var(--fg2);margin-top:1px}
+  .spacer{flex:1}
+  .theme-btn{background:var(--panel);border:1px solid var(--border);color:var(--fg);border-radius:9px;
+    width:36px;height:36px;font-size:16px;display:grid;place-items:center;cursor:pointer}
+  .theme-btn:hover{border-color:var(--accent)}
+  .wrap{max-width:1040px;margin:0 auto;padding:18px 18px 64px}
+  .sub{color:var(--fg2);font-size:13px;margin:2px 0 18px}
+  .grid{display:grid;gap:16px}
+  @media(min-width:760px){.grid.cols2{grid-template-columns:1fr 1fr}}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:18px;
+    box-shadow:var(--shadow)}
+  .card h2{font-size:14.5px;margin:0 0 14px;font-weight:700;display:flex;align-items:center;gap:9px}
+  .card h2 .dot{width:9px;height:9px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 4px var(--accent-bg)}
+  label{display:block;font-size:11.5px;color:var(--fg2);margin:11px 0 5px;font-weight:600;letter-spacing:.1px}
+  select,input[type=text],input[type=password]{width:100%;padding:9px 11px;background:var(--panel2);
+    color:var(--fg);border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;font-family:var(--sans);
+    transition:border-color .15s,box-shadow .15s}
+  input:focus,select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-bg)}
+  .row{display:flex;gap:11px;flex-wrap:wrap}
+  .row>div{flex:1;min-width:130px}
+  .toggles{display:grid;grid-template-columns:1fr 1fr;gap:7px 14px;margin-top:9px}
+  [hidden]{display:none!important}
+  .tg{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--fg)}
+  .tg input{width:auto;accent-color:var(--accent)}
+  button{cursor:pointer;font-family:var(--sans)}
+  .btn{background:var(--accent);color:#08130c;border:none;border-radius:var(--radius-sm);padding:11px 16px;
+    font-size:13.5px;font-weight:700;width:100%;margin-top:15px;transition:filter .15s,transform .05s;box-shadow:var(--shadow)}
+  .btn:hover{filter:brightness(1.06)}
+  .btn:active{transform:translateY(1px)}
+  .btn:disabled{opacity:.5;cursor:not-allowed}
+  .btn.alt{background:var(--accent2);color:#04101f}
+  :root[data-theme="light"] .btn{color:#fff}
+  .btn.ghost{background:var(--accent-bg);border:1px solid var(--accent-border);color:var(--accent-dim);width:auto;
+    padding:7px 13px;margin:0;font-size:12px;font-weight:600;box-shadow:none}
+  .btn.ghost:hover{background:var(--accent-bg-h);filter:none}
+  .chip{display:inline-flex;align-items:center;gap:6px;background:var(--chip);border:1px solid var(--border);
+    border-radius:20px;padding:4px 11px;font-size:11.5px;color:var(--fg2)}
+  .chip b{color:var(--fg);font-weight:600}
+  .device{background:linear-gradient(135deg,var(--accent-bg-h),var(--accent2-bg));
+    border:1px solid var(--accent-border);border-radius:var(--radius);padding:13px 16px;margin-bottom:16px;
+    display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+  .mono{font-family:var(--mono);font-size:12px}
+  .muted{color:var(--muted)}
+  .log{font-family:var(--mono);font-size:11.5px;background:var(--panel2);border:1px solid var(--border);
+    border-radius:var(--radius-sm);padding:11px;max-height:170px;overflow:auto;white-space:pre-wrap;margin-top:12px}
+  .list{display:flex;flex-direction:column;gap:8px;margin-top:4px}
+  .item{display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--panel2);
+    border:1px solid var(--border);border-radius:var(--radius-sm);font-size:12.5px;transition:border-color .15s}
+  .item:hover{border-color:var(--accent-border)}
+  .item .st{width:9px;height:9px;border-radius:50%;flex:none}
+  .st.ok{background:var(--ok);box-shadow:0 0 0 3px var(--accent-bg)} .st.run{background:var(--warn);animation:pulse 1.2s infinite}
+  .st.fail{background:var(--err)} .st.idle{background:var(--muted)}
+  @keyframes pulse{50%{opacity:.35}}
+  .item .grow{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .ver{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border-sub);font-size:12.5px}
+  .ver:last-child{border-bottom:none}
+  .ver .tag{font-family:var(--mono);font-size:11.5px;background:var(--chip);border:1px solid var(--border);padding:3px 8px;border-radius:6px}
+  .banner{font-size:12px;padding:10px 13px;border-radius:var(--radius-sm);margin-top:11px;display:none;line-height:1.45}
+  .banner.err{background:rgba(239,68,68,.1);border:1px solid var(--err);color:var(--err);display:block}
+  .banner.ok{background:var(--accent-bg-h);border:1px solid var(--accent-border);color:var(--accent-dim);display:block}
+  .seg{display:inline-flex;background:var(--panel2);border:1px solid var(--border);border-radius:9px;padding:3px;gap:3px;margin-top:4px}
+  .seg button{background:none;border:none;color:var(--fg2);font-size:12px;font-weight:600;padding:5px 12px;border-radius:6px}
+  .seg button.on{background:var(--accent);color:#08130c}
+  :root[data-theme="light"] .seg button.on{color:#fff}
+  .foot{color:var(--muted);font-size:11.5px;margin-top:26px;text-align:center;line-height:1.7}
+  code{font-family:var(--mono);background:var(--chip);border:1px solid var(--border-sub);padding:1px 6px;border-radius:5px;font-size:12px}
+  ::-webkit-scrollbar{width:10px;height:10px}
+  ::-webkit-scrollbar-thumb{background:var(--border);border-radius:6px}
+  ::-webkit-scrollbar-track{background:var(--panel2)}
+</style>
+</head>
+<body>
+<div class="topbar">
+  <div class="inner">
+    <div class="brand">
+      <div><h1>Kernel Build Console</h1><div class="tagline">GKI · KernelSU · SUSFS — build, patch &amp; track</div></div>
+    </div>
+    <div class="spacer"></div>
+    <span class="chip"><b id="repoChip">CodeExia54/GKI_KernelSU_SUSFS</b></span>
+    <span class="chip">branch <b id="refChip">dev</b></span>
+    <button class="theme-btn" id="themeBtn" title="Toggle theme">🌙</button>
+  </div>
+</div>
+<div class="wrap">
+  <div class="sub">Launch kernel &amp; LKM builds on your fork, patch <code>init_boot.img</code>, and watch upstream root updates — all from one page.</div>
+
+  <div class="device" id="deviceBanner">
+    <span class="chip">Target</span>
+    <span class="mono" id="devLine">android13 · 5.15 · arm64-v8a · ReSukiSU</span>
+    <span class="muted" style="font-size:11.5px">defaults preselected for your device</span>
+  </div>
+
+  <!-- SETTINGS -->
+  <div class="card" style="margin-bottom:16px">
+    <h2><span class="dot" style="background:var(--accent2)"></span> Connection</h2>
+    <div class="row">
+      <div>
+        <label>Repository (owner/name)</label>
+        <input type="text" id="repo" value="CodeExia54/GKI_KernelSU_SUSFS">
+      </div>
+      <div>
+        <label>Branch (workflow ref)</label>
+        <input type="text" id="ref" value="dev">
+      </div>
+    </div>
+    <label>GitHub token — fine-grained PAT with <b>Actions: Read&amp;Write</b> on this repo (stored only in this browser)</label>
+    <input type="password" id="pat" placeholder="github_pat_… or ghp_…" autocomplete="off">
+    <div class="row" style="margin-top:10px">
+      <button class="btn ghost" id="saveTok">Save token</button>
+      <button class="btn ghost" id="testTok">Test access</button>
+      <button class="btn ghost" id="clearTok">Clear</button>
+      <a class="btn ghost" href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">Create a PAT ↗</a>
+    </div>
+    <div class="banner" id="tokMsg"></div>
+    <p class="muted" style="font-size:11.5px;margin:10px 0 0">
+      A token gives you <b>one-click builds</b> straight from this page (needs <b>Actions: R/W</b>; the patcher also needs <b>Contents: R/W</b>).
+      Don't want a token? Use the <b>“Open in GitHub Actions (no token)”</b> link under each build — it opens the workflow's Run page where you just press <b>Run workflow</b> while logged in to GitHub. No token needed for that path.
+    </p>
+  </div>
+
+  <div class="grid cols2">
+    <!-- FULL KERNEL -->
+    <div class="card">
+      <h2><span class="dot"></span> Full Kernel Build <span class="muted" style="font-weight:400;font-size:11.5px">→ kernel-custom.yml</span></h2>
+      <div class="row">
+        <div>
+          <label>Kernel (KMI)</label>
+          <select id="k_kernel"></select>
+        </div>
+        <div>
+          <label>Security patch / sub-version</label>
+          <select id="k_patch"></select>
+        </div>
+      </div>
+      <div class="row">
+        <div>
+          <label>Root variant</label>
+          <select id="k_variant">
+            <option>ReSukiSU</option><option>SukiSU</option>
+            <option>SukiSU(40726)</option><option>SukiSU(40548)</option><option>Official</option>
+          </select>
+        </div>
+        <div data-opt="kpm">
+          <label>KPM</label>
+          <select id="k_kpm">
+            <option value="disabled (关闭)">disabled</option>
+            <option value="enabled (开启)">enabled</option>
+          </select>
+        </div>
+      </div>
+      <div class="muted" id="k_note" style="font-size:11.5px;margin-top:6px"></div>
+      <label>Artifact output</label>
+      <select id="k_upload">
+        <option value="仅上传 AnyKernel3.zip">AnyKernel3.zip only</option>
+        <option value="上传全部">Everything (boot img + zip)</option>
+      </select>
+      <div class="row">
+        <div style="flex:2">
+          <label>Custom kernel string / LOCALVERSION (optional)
+            <span class="muted" style="font-weight:400"> — paste your full <code>uname -r</code>; the version number is auto-stripped</span>
+          </label>
+          <input type="text" id="k_version" placeholder="5.15.206-android13-8-00056-g3f87b8704e9e-ab15683575">
+          <button type="button" class="btn ghost" id="fillUname" style="margin-top:6px">Use my device string &amp; time</button>
+        </div>
+        <div>
+          <label>Custom build time (optional)</label>
+          <input type="text" id="k_btime" placeholder="Wed Jun 17 04:35:03 UTC 2026 · blank = Sun Dec 01 08:10:00 UTC 2024 · N = now">
+        </div>
+      </div>
+      <div class="toggles">
+        <label class="tg" data-opt="susfs"><input type="checkbox" id="t_susfs" checked> SUSFS</label>
+        <label class="tg" data-opt="zram"><input type="checkbox" id="t_zram"> ZRAM (LZ4)</label>
+        <label class="tg" data-opt="bbg"><input type="checkbox" id="t_bbg"> BBG anti-brick</label>
+        <label class="tg" data-opt="rekernel"><input type="checkbox" id="t_rekernel"> Re-Kernel</label>
+        <label class="tg" data-opt="cve"><input type="checkbox" id="t_cve"> CVE-2026-43499 fix</label>
+        <label class="tg" data-opt="supp"><input type="checkbox" id="t_supp"> OnePlus 8E</label>
+        <label class="tg" data-opt="networking" title="Network enhancement: BBRv3 TCP congestion control (5.10-6.6; 6.12 keeps BBR v1) set as the default, full IPSet + netfilter matches, FQ / FQ_CODEL / CAKE traffic shaping, in-kernel WireGuard, and the CIFS (SMB) client. Off = stock GKI network config."><input type="checkbox" id="t_net"> Network enhancement</label>
+        <label class="tg" data-opt="nomount" title="Builds the NoMount VFS path-redirection subsystem (CONFIG_NOMOUNT=y) into the kernel. It does nothing on its own: you still install the NoMount metamodule in the manager. Off = no NoMount in the kernel."><input type="checkbox" id="t_nomount"> NoMount (kernel)</label>
+      </div>
+      <button class="btn" id="runKernel">Start kernel build</button>
+      <a class="btn ghost" id="openKernel" target="_blank" rel="noopener"
+         style="display:inline-block;margin-top:8px;text-decoration:none">Open in GitHub Actions (no token) ↗</a>
+      <div class="banner" id="kMsg"></div>
+    </div>
+
+    <!-- LKM -->
+    <div class="card">
+      <h2><span class="dot" style="background:var(--accent2)"></span> LKM Build (kernelsu.ko) <span class="muted" style="font-weight:400;font-size:11.5px">→ kernel-lkm.yml</span></h2>
+      <div class="row">
+        <div>
+          <label>Root variant (LKM source)</label>
+          <select id="l_variant">
+            <option>ReSukiSU</option><option>SukiSU-Ultra</option>
+            <option>KernelSU</option><option>KernelSU-Next</option>
+          </select>
+        </div>
+        <div>
+          <label>KMI</label>
+          <select id="l_kmi">
+            <option>android12-5.10</option><option>android13-5.10</option>
+            <option selected>android13-5.15</option><option>android14-5.15</option>
+            <option>android14-6.1</option><option>android15-6.6</option>
+            <option>android16-6.12</option><option>android17-6.18</option>
+          </select>
+        </div>
+      </div>
+      <label>Architecture</label>
+      <select id="l_arch"><option>arm64</option><option>x86_64</option><option>both</option></select>
+      <p class="muted" style="font-size:11.5px;margin:12px 0 0">Produces <code>&lt;kmi&gt;_kernelsu.ko</code> as a run artifact — flash-free root via boot.img patch in the manager.</p>
+      <button class="btn alt" id="runLkm">Build kernelsu.ko</button>
+      <a class="btn ghost" id="openLkm" target="_blank" rel="noopener"
+         style="display:inline-block;margin-top:8px;text-decoration:none">Open in GitHub Actions (no token) ↗</a>
+      <div class="banner" id="lMsg"></div>
+    </div>
+  </div>
+
+  <!-- MULTI-KERNEL BUILD (queue) -->
+  <div class="card" style="margin-top:16px">
+    <h2><span class="dot"></span> Multi build <span class="muted" style="font-weight:400;font-size:11.5px">queue any mix of KMI + sub-version, build them all</span></h2>
+    <div class="row">
+      <div>
+        <label>Kernel (KMI)</label>
+        <select id="m_kernel"></select>
+      </div>
+      <div>
+        <label>Sub-version</label>
+        <select id="m_patch"></select>
+      </div>
+      <div>
+        <label>Variant</label>
+        <select id="m_variant">
+          <option>ReSukiSU</option><option>SukiSU</option>
+          <option>SukiSU(40726)</option><option>SukiSU(40548)</option><option>Official</option>
+        </select>
+      </div>
+    </div>
+    <button class="btn ghost" id="addQueue" style="margin-top:12px">Add to queue</button>
+    <label style="margin-top:14px">Build queue — <b id="qCount">0</b> item(s) <span class="muted" style="font-weight:400">(each fires its own build)</span></label>
+    <div class="list" id="m_queue"><div class="muted" style="font-size:12px">Queue is empty. Add any KMI + sub-version combos above.</div></div>
+    <div class="row" style="margin-top:10px">
+      <button class="btn" id="runMulti" style="flex:2">Build all queued (needs token)</button>
+      <button class="btn ghost" id="clearQueue" style="align-self:center">Clear</button>
+      <a class="btn ghost" id="openMatrix" target="_blank" rel="noopener" style="text-decoration:none;align-self:center">full matrix ↗</a>
+    </div>
+    <div class="banner" id="mMsg"></div>
+  </div>
+
+  <!-- BOOT PATCHER -->
+  <div class="card" style="margin-top:16px">
+    <h2><span class="dot" style="background:var(--warn)"></span> init_boot Patcher <span class="muted" style="font-weight:400;font-size:11.5px">upload → patch (LKM) → download</span></h2>
+    <p class="muted" style="font-size:11.5px;margin:0 0 10px">
+      Patches your stock <code>init_boot.img</code> (or boot.img) with the KernelSU LKM using ReSukiSU's own <code>ksud</code> in CI — the same result the manager produces, without the manager. Your image travels via a temporary private-to-your-repo Release and is auto-deleted after download, so nothing piles up.
+    </p>
+    <div class="row">
+      <div>
+        <label>Image file (init_boot.img / boot.img)</label>
+        <input type="text" id="p_fileLabel" readonly placeholder="no file selected" style="cursor:pointer">
+        <input type="file" id="p_file" accept=".img" hidden>
+      </div>
+      <div>
+        <label>KMI</label>
+        <select id="p_kmi">
+          <option>android12-5.10</option><option>android13-5.10</option>
+          <option selected>android13-5.15</option><option>android14-5.15</option>
+          <option>android14-6.1</option><option>android15-6.6</option>
+          <option>android16-6.12</option><option>android17-6.18</option>
+        </select>
+      </div>
+      <div>
+        <label>Variant (ksud source)</label>
+        <select id="p_variant">
+          <option>ReSukiSU</option><option>SukiSU-Ultra</option>
+          <option>KernelSU</option><option>KernelSU-Next</option>
+        </select>
+      </div>
+    </div>
+    <button class="btn" id="runPatch" style="background:var(--warn);color:#1a1400">Upload &amp; patch</button>
+    <div class="banner" id="pMsg"></div>
+    <div class="log" id="pLog" hidden></div>
+    <div id="pResult" hidden style="margin-top:12px"></div>
+  </div>
+
+  <div class="grid cols2" style="margin-top:16px">
+    <!-- UPSTREAM VERSIONS -->
+    <div class="card">
+      <h2><span class="dot" style="background:var(--warn)"></span> Upstream root updates
+        <button class="btn ghost" id="refreshVer" style="margin-left:auto">↻</button>
+      </h2>
+      <div id="versions"><div class="muted" style="font-size:12px">Loading…</div></div>
+    </div>
+
+    <!-- RECENT RUNS -->
+    <div class="card">
+      <h2><span class="dot" style="background:var(--ok)"></span> Recent runs
+        <button class="btn ghost" id="refreshRuns" style="margin-left:auto">↻</button>
+      </h2>
+      <div class="list" id="runs"><div class="muted" style="font-size:12px">Add a token, then refresh.</div></div>
+    </div>
+  </div>
+
+  <div class="foot">
+    Runs entirely in your browser · token never leaves this device · calls the GitHub REST API directly.<br>
+    <span id="pagesHint"></span>
+  </div>
+</div>
+
+<script>
+const $ = s => document.querySelector(s);
+const API = 'https://api.github.com';
+const VARIANT_REPO = {
+  'ReSukiSU':'ReSukiSU/ReSukiSU','SukiSU-Ultra':'SukiSU-Ultra/SukiSU-Ultra',
+  'KernelSU':'tiann/KernelSU','KernelSU-Next':'KernelSU-Next/KernelSU-Next'
+};
+const KMI = ['android12-5.10','android13-5.10','android13-5.15','android14-5.15',
+  'android14-6.1','android15-6.6','android16-6.12','android17-6.18'];
+// kernel_version -> android for custom workflow + data file path
+const KVER = {'5.10':'android12','5.15':'android13','6.1':'android14','6.6':'android15','6.12':'android16'};
+
+const store = {
+  get:k=>{try{return localStorage.getItem(k)}catch(e){return null}},
+  set:(k,v)=>{try{localStorage.setItem(k,v)}catch(e){}},
+  del:k=>{try{localStorage.removeItem(k)}catch(e){}}
+};
+function tok(){return ($('#pat').value||'').trim()}
+function repo(){return ($('#repo').value||'').trim()}
+function ref(){return ($('#ref').value||'dev').trim()}
+function hdr(auth){const h={'Accept':'application/vnd.github+json','X-GitHub-Api-Version':'2022-11-28'};
+  if(auth&&tok())h['Authorization']='Bearer '+tok();return h;}
+function banner(el,msg,cls){el.className='banner '+cls;el.textContent=msg;}
+
+// ---- restore saved ----
+(function(){
+  const t=store.get('gh_pat'); if(t)$('#pat').value=t;
+  const r=store.get('gh_repo'); if(r)$('#repo').value=r;
+  const b=store.get('gh_ref'); if(b)$('#ref').value=b;
+  syncChips();
+})();
+function syncChips(){$('#repoChip').textContent=repo();$('#refChip').textContent=ref();
+  const [o,n]=repo().split('/');
+  $('#pagesHint').innerHTML = o&&n ? `Live at <code>https://${o.toLowerCase()}.github.io/${n}/console.html</code> once Pages is enabled.` : '';}
+['repo','ref'].forEach(id=>$('#'+id).addEventListener('input',()=>{
+  store.set('gh_repo',repo());store.set('gh_ref',ref());syncChips();}));
+
+$('#saveTok').onclick=()=>{store.set('gh_pat',tok());banner($('#tokMsg'),'Token saved in this browser.','ok');};
+$('#clearTok').onclick=()=>{store.del('gh_pat');$('#pat').value='';banner($('#tokMsg'),'Token cleared.','ok');};
+$('#testTok').onclick=async()=>{
+  if(!tok())return banner($('#tokMsg'),'Enter a token first.','err');
+  try{
+    const r=await fetch(`${API}/repos/${repo()}`,{headers:hdr(true)});
+    if(!r.ok)throw new Error(r.status+' '+r.statusText);
+    const j=await r.json();
+    banner($('#tokMsg'),`✓ Access OK — ${j.full_name} (${j.permissions&&j.permissions.push?'write':'read-only'})`,
+      (j.permissions&&j.permissions.push)?'ok':'err');
+    loadRuns();
+  }catch(e){banner($('#tokMsg'),'✗ '+e.message+' — check token scope (Actions R/W) & repo name.','err');}
+};
+
+// ---- populate kernel/patch dropdowns from data/*.json ----
+async function loadKernels(){
+  const sel=$('#k_kernel'), msel=$('#m_kernel'); sel.innerHTML=''; msel.innerHTML='';
+  Object.keys(KVER).forEach(kv=>{
+    const o=document.createElement('option');o.value=kv;o.textContent=`${KVER[kv]} · ${kv}`;sel.appendChild(o);
+    const o2=o.cloneNode(true);msel.appendChild(o2);});
+  sel.value='5.15'; msel.value='5.15'; // device default
+  sel.onchange=loadPatches;
+  msel.onchange=loadMPatches;
+  await loadBranchStatus();
+  await loadPatches();
+  await loadMPatches();
+}
+let BRANCH_STATUS={};
+async function loadBranchStatus(){
+  const [o,n]=repo().split('/');
+  try{const r=await fetch(`https://raw.githubusercontent.com/${o}/${n}/${ref()}/data/branch_status.json`);
+    if(r.ok)BRANCH_STATUS=await r.json();}catch(e){}
+}
+function depOf(kv,date){try{return (BRANCH_STATUS[kv].dates[date])||'unknown';}catch(e){return 'unknown';}}
+async function loadPatches(){
+  const kv=$('#k_kernel').value, sel=$('#k_patch'); sel.innerHTML='<option value="lts">lts</option>';
+  const [o,n]=repo().split('/'); const rf=ref();
+  try{
+    const url=`https://raw.githubusercontent.com/${o}/${n}/${rf}/data/${KVER[kv]}/${kv}.json`;
+    const r=await fetch(url); if(!r.ok)throw 0; const j=await r.json();
+    (j.entries||[]).slice().reverse().forEach(e=>{
+      const st=depOf(kv,e.date);
+      const op=document.createElement('option');op.value=e.date;
+      op.textContent=`${e.date}  →  ${e.kernel}`+(st==='deprecated'?'   ⚠ deprecated':(st==='active'?'   ✓':''));
+      if(st==='deprecated')op.style.color='var(--warn)';
+      sel.appendChild(op);});
+    if(j.lts){sel.querySelector('option').textContent=`lts  →  ${j.lts} (latest, recommended)`;}
+  }catch(e){/* keep lts only */}
+  sel.value='lts';
+}
+
+// ---- dispatch ----
+async function dispatch(wf,inputs,msgEl,btn){
+  if(!tok())return banner(msgEl,'Add & save a GitHub token first (Connection panel).','err');
+  btn.disabled=true; banner(msgEl,'Dispatching…','ok');
+  try{
+    const r=await fetch(`${API}/repos/${repo()}/actions/workflows/${wf}/dispatches`,{
+      method:'POST',headers:hdr(true),body:JSON.stringify({ref:ref(),inputs})});
+    if(r.status===204){banner(msgEl,'✓ Build queued! Check "Recent runs" in a few seconds.','ok');
+      setTimeout(loadRuns,3500);}
+    else{const t=await r.text();throw new Error(r.status+' — '+t);}
+  }catch(e){banner(msgEl,'✗ '+e.message,'err');}
+  finally{btn.disabled=false;}
+}
+
+// per-version matrix workflow (whole matrix, no-token friendly)
+const WF_MATRIX={'5.10':'kernel-a12-5-10.yml','5.15':'kernel-a13-5-15.yml',
+  '6.1':'kernel-a14-6-1.yml','6.6':'kernel-a15-6-6.yml','6.12':'kernel-a16-6-12.yml'};
+function actionsUrl(wf){return `https://github.com/${repo()}/actions/workflows/${wf}`;}
+
+// Build options each root variant really supports (checked against each root's kernel/Kconfig and build.yml).
+// KPM exists only in SukiSU: ReSukiSU and Official declare no CONFIG_KPM, and build.yml aborts if KPM is
+// requested without it. The other toggles are kernel-level, so every variant supports them (SUSFS is built
+// into ReSukiSU/SukiSU and patched into Official).
+const KERNEL_OPTS=['susfs','zram','bbg','rekernel','cve','supp','networking','nomount'];
+const VARIANT_CAPS={
+  'ReSukiSU':KERNEL_OPTS,
+  'SukiSU':[...KERNEL_OPTS,'kpm'],
+  'SukiSU(40726)':[...KERNEL_OPTS,'kpm'],
+  'SukiSU(40548)':[...KERNEL_OPTS,'kpm'],
+  'Official':KERNEL_OPTS
+};
+const VARIANT_NOTE={
+  'ReSukiSU':'KPM is hidden: ReSukiSU has no KPM support.',
+  'Official':'KPM is hidden: official KernelSU has no KPM support.'
+};
+function supports(opt){return (VARIANT_CAPS[$('#k_variant').value]||KERNEL_OPTS).includes(opt);}
+function applyCaps(){
+  document.querySelectorAll('[data-opt]').forEach(el=>{el.hidden=!supports(el.dataset.opt);});
+  if(!supports('kpm'))$('#k_kpm').value='disabled (关闭)'; // never send a hidden option
+  $('#k_note').textContent=VARIANT_NOTE[$('#k_variant').value]||'';
+}
+$('#k_variant').onchange=applyCaps;
+applyCaps();
+
+function kernelInputs(){return {
+  kernel_version:$('#k_kernel').value,
+  os_patch_level:$('#k_patch').value,
+  kernelsu_variant:$('#k_variant').value,
+  use_kpm:supports('kpm')?$('#k_kpm').value:'disabled (关闭)',
+  artifact_upload_mode:$('#k_upload').value,
+  version:$('#k_version').value.trim(), build_time:$('#k_btime').value.trim(),
+  droidspaces:'off', droidspaces_ntsync:false,
+  use_zram:$('#t_zram').checked, use_bbg:$('#t_bbg').checked,
+  use_rekernel:$('#t_rekernel').checked, cve_2026_43499_patch:$('#t_cve').checked,
+  use_networking:$('#t_net').checked, use_nomount:$('#t_nomount').checked,
+  ksu_mode:$('#t_susfs').checked?'关闭':'禁用SUSFS', supp_op:$('#t_supp').checked
+};}
+// both read from the stock boot.img's kernel banner: "Linux version <DEVICE_UNAME> (...) #1 SMP PREEMPT <DEVICE_BTIME>"
+const DEVICE_UNAME='5.15.206-android13-8-00056-g3f87b8704e9e-ab15683575';
+const DEVICE_BTIME='Wed Jun 17 04:35:03 UTC 2026';
+$('#fillUname').onclick=()=>{$('#k_version').value=DEVICE_UNAME;$('#k_btime').value=DEVICE_BTIME;};
+$('#runKernel').onclick=()=>dispatch('kernel-custom.yml',kernelInputs(),$('#kMsg'),$('#runKernel'));
+$('#runLkm').onclick=()=>dispatch('kernel-lkm.yml',{
+  variant:$('#l_variant').value, kmi:$('#l_kmi').value, arch:$('#l_arch').value
+},$('#lMsg'),$('#runLkm'));
+
+// keep the "no token" deep-links pointing at the right Actions pages
+function syncActionLinks(){
+  $('#openKernel').href=actionsUrl('kernel-custom.yml');
+  $('#openLkm').href=actionsUrl('kernel-lkm.yml');
+  $('#openMatrix').href=actionsUrl(WF_MATRIX[$('#m_kernel').value]||'main.yml');
+}
+
+// ---- multi build: a free queue of any KMI + sub-version combos ----
+let QUEUE=[];
+// populate the multi sub-version dropdown for the chosen KMI (with deprecation flags)
+async function loadMPatches(){
+  const sel=$('#m_patch'); if(!sel)return; const kv=$('#m_kernel').value;
+  sel.innerHTML='<option value="lts">lts → latest</option>';
+  const [o,n]=repo().split('/');
+  try{
+    const r=await fetch(`https://raw.githubusercontent.com/${o}/${n}/${ref()}/data/${KVER[kv]}/${kv}.json`);
+    if(r.ok){const j=await r.json();
+      if(j.lts)sel.querySelector('option').textContent=`lts → ${j.lts} (latest)`;
+      j.entries.slice().reverse().forEach(e=>{const st=depOf(kv,e.date);
+        const op=document.createElement('option');op.value=e.date;
+        op.textContent=`${e.date} → ${e.kernel}`+(st==='deprecated'?'   ⚠ deprecated':(st==='active'?'  ✓':''));
+        if(st==='deprecated')op.style.color='var(--warn)'; sel.appendChild(op);});
+    }
+  }catch(e){}
+  syncActionLinks();
+}
+function renderQueue(){
+  const box=$('#m_queue'); $('#qCount').textContent=QUEUE.length;
+  if(!QUEUE.length){box.innerHTML='<div class="muted" style="font-size:12px">Queue is empty. Add any KMI + sub-version combos above.</div>';return;}
+  box.innerHTML='';
+  QUEUE.forEach((it,i)=>{const el=document.createElement('div');el.className='item';
+    el.innerHTML=`<span class="st idle"></span>
+      <span class="grow"><b>${KVER[it.kv]}·${it.kv}</b> — ${it.patch} <span class="muted">· ${it.variant}</span></span>
+      <button class="btn ghost" data-i="${i}" style="padding:3px 9px">✕</button>`;
+    el.querySelector('button').onclick=()=>{QUEUE.splice(i,1);renderQueue();};
+    box.appendChild(el);});
+}
+$('#addQueue').onclick=()=>{
+  const kv=$('#m_kernel').value, patch=$('#m_patch').value, variant=$('#m_variant').value;
+  if(QUEUE.some(x=>x.kv===kv&&x.patch===patch&&x.variant===variant))
+    return banner($('#mMsg'),'That combo is already queued.','err');
+  QUEUE.push({kv,patch,variant}); renderQueue(); banner($('#mMsg'),`Added ${KVER[kv]}·${kv} — ${patch}. Add more or build.`,'ok');
+};
+$('#clearQueue').onclick=()=>{QUEUE=[];renderQueue();$('#mMsg').className='banner';};
+async function dispatchOne(kv,patch,variant){
+  const r=await fetch(`${API}/repos/${repo()}/actions/workflows/kernel-custom.yml/dispatches`,{method:'POST',
+    headers:hdr(true),body:JSON.stringify({ref:ref(),inputs:{
+      kernel_version:kv, os_patch_level:patch, kernelsu_variant:variant,
+      use_kpm:'disabled (关闭)', artifact_upload_mode:'仅上传 AnyKernel3.zip',
+      use_zram:false,use_bbg:false,ksu_mode:'关闭'}})});
+  return r.status===204;
+}
+$('#runMulti').onclick=async()=>{
+  if(!tok())return banner($('#mMsg'),'Multi build needs a token. Without one, use the “full matrix” link (builds one whole KMI).','err');
+  if(!QUEUE.length)return banner($('#mMsg'),'Add at least one build to the queue.','err');
+  $('#runMulti').disabled=true; banner($('#mMsg'),`Queuing ${QUEUE.length} build(s)…`,'ok'); let ok=0,fail=0;
+  const rows=[...$('#m_queue').querySelectorAll('.item .st')];
+  for(let i=0;i<QUEUE.length;i++){const it=QUEUE[i];
+    if(rows[i]){rows[i].className='st run';}
+    try{const good=await dispatchOne(it.kv,it.patch,it.variant); good?ok++:fail++;
+      if(rows[i])rows[i].className='st '+(good?'ok':'fail');}
+    catch(e){fail++;if(rows[i])rows[i].className='st fail';}
+    await new Promise(r=>setTimeout(r,800));
+  }
+  banner($('#mMsg'),`Queued ${ok} build(s)${fail?`, ${fail} failed`:''}. See Recent runs.`,fail?'err':'ok');
+  $('#runMulti').disabled=false; setTimeout(loadRuns,3500);
+};
+
+// ---- theme toggle ----
+(function(){
+  const saved=store.get('gh_theme');
+  if(saved){document.documentElement.setAttribute('data-theme',saved);}
+  function cur(){return document.documentElement.getAttribute('data-theme')
+    || (matchMedia('(prefers-color-scheme: light)').matches?'light':'dark');}
+  function paint(){$('#themeBtn').textContent = cur()==='light'?'☀️':'🌙';}
+  paint();
+  $('#themeBtn').onclick=()=>{const next=cur()==='light'?'dark':'light';
+    document.documentElement.setAttribute('data-theme',next);store.set('gh_theme',next);paint();};
+})();
+
+// ---- upstream versions ----
+async function loadVersions(){
+  const box=$('#versions'); box.innerHTML='';
+  for(const [name,rp] of Object.entries(VARIANT_REPO)){
+    const row=document.createElement('div'); row.className='ver';
+    row.innerHTML=`<span><a href="https://github.com/${rp}" target="_blank" rel="noopener">${name}</a></span><span class="tag muted">…</span>`;
+    box.appendChild(row);
+    (async()=>{
+      try{
+        let tag='—',when='';
+        let r=await fetch(`${API}/repos/${rp}/releases/latest`,{headers:hdr(true)});
+        if(r.ok){const j=await r.json();tag=j.tag_name;when=(j.published_at||'').slice(0,10);}
+        else{ // no releases -> latest commit on default branch
+          const c=await fetch(`${API}/repos/${rp}/commits?per_page=1`,{headers:hdr(true)});
+          if(c.ok){const a=await c.json();tag=a[0].sha.slice(0,7);when=(a[0].commit.author.date||'').slice(0,10);}
+        }
+        row.querySelector('.tag').classList.remove('muted');
+        row.querySelector('.tag').textContent=tag+(when?'  · '+when:'');
+      }catch(e){row.querySelector('.tag').textContent='n/a';}
+    })();
+  }
+}
+
+// ---- recent runs ----
+async function loadRuns(){
+  const box=$('#runs');
+  if(!tok()){box.innerHTML='<div class="muted" style="font-size:12px">Add a token, then refresh.</div>';return;}
+  box.innerHTML='<div class="muted" style="font-size:12px">Loading…</div>';
+  try{
+    const r=await fetch(`${API}/repos/${repo()}/actions/runs?per_page=8`,{headers:hdr(true)});
+    if(!r.ok)throw new Error(r.status+' '+r.statusText);
+    const j=await r.json(); box.innerHTML='';
+    if(!j.workflow_runs.length){box.innerHTML='<div class="muted" style="font-size:12px">No runs yet.</div>';return;}
+    j.workflow_runs.forEach(run=>{
+      const cls = run.status!=='completed' ? 'run' : (run.conclusion==='success'?'ok':(run.conclusion==='failure'?'fail':'idle'));
+      const state = run.status!=='completed' ? run.status : run.conclusion;
+      const el=document.createElement('div'); el.className='item';
+      el.innerHTML=`<span class="st ${cls}"></span>
+        <span class="grow"><b>${run.name}</b><br><span class="muted mono" style="font-size:11px">${state} · ${(run.created_at||'').slice(0,16).replace('T',' ')}</span></span>
+        <a href="${run.html_url}" target="_blank" rel="noopener" class="chip">open ↗</a>`;
+      box.appendChild(el);
+    });
+  }catch(e){box.innerHTML=`<div class="banner err" style="display:block">${e.message}</div>`;}
+}
+
+$('#refreshVer').onclick=loadVersions;
+$('#refreshRuns').onclick=loadRuns;
+
+// ---- boot patcher ----
+let patchFile=null;
+$('#p_fileLabel').onclick=()=>$('#p_file').click();
+$('#p_file').onchange=e=>{patchFile=e.target.files[0];
+  $('#p_fileLabel').value=patchFile?`${patchFile.name} (${(patchFile.size/1048576).toFixed(1)} MB)`:'';};
+function plog(m){const el=$('#pLog');el.hidden=false;el.textContent+=m+'\n';el.scrollTop=el.scrollHeight;}
+async function gh(path,opt){const r=await fetch(API+path,{...opt,headers:{...hdr(true),...(opt&&opt.headers||{})}});
+  if(!r.ok){const t=await r.text();throw new Error(`${r.status} ${path} — ${t.slice(0,180)}`);}
+  return r.status===204?null:r.json();}
+
+$('#runPatch').onclick=async()=>{
+  const btn=$('#runPatch');
+  if(!tok())return banner($('#pMsg'),'Add & save a token first (Actions R/W + Contents R/W).','err');
+  if(!patchFile)return banner($('#pMsg'),'Choose an init_boot.img first.','err');
+  btn.disabled=true; $('#pLog').textContent=''; $('#pResult').hidden=true;
+  const kmi=$('#p_kmi').value, variant=$('#p_variant').value;
+  const tag='boot-patch-'+Date.now();
+  const assetName='input-'+(patchFile.name.replace(/[^A-Za-z0-9._-]/g,'_'));
+  try{
+    banner($('#pMsg'),'Working… keep this tab open.','ok');
+    plog('• creating temporary release '+tag);
+    const rel=await gh(`/repos/${repo()}/releases`,{method:'POST',
+      body:JSON.stringify({tag_name:tag,name:tag,prerelease:true,
+        body:'Temporary transport for boot patching. Safe to delete.'})});
+    plog('• uploading image ('+(patchFile.size/1048576).toFixed(1)+' MB)…');
+    const buf=await patchFile.arrayBuffer();
+    const up=await fetch(`https://uploads.github.com/repos/${repo()}/releases/${rel.id}/assets?name=${encodeURIComponent(assetName)}`,
+      {method:'POST',headers:{...hdr(true),'Content-Type':'application/octet-stream'},body:buf});
+    if(!up.ok)throw new Error('asset upload failed: '+up.status+' '+(await up.text()).slice(0,160));
+    plog('• image uploaded');
+    plog('• dispatching patch-boot.yml');
+    await gh(`/repos/${repo()}/actions/workflows/patch-boot.yml/dispatches`,{method:'POST',
+      body:JSON.stringify({ref:ref(),inputs:{release_tag:tag,asset_name:assetName,kmi,variant}})});
+    loadRuns();
+    plog('• patching in CI (≈2–4 min)…');
+    let done=null;
+    for(let i=0;i<80;i++){
+      await new Promise(r=>setTimeout(r,6000));
+      const r=await gh(`/repos/${repo()}/releases/${rel.id}`);
+      const a=(r.assets||[]).find(x=>x.name.startsWith('patched-'));
+      if(a){done=a;break;}
+      if(i===6||i%8===0)plog('  …still working ('+((i+1)*6)+'s)');
+    }
+    if(!done)throw new Error('timed out — check Recent runs for the patch job log.');
+    plog('• patched image ready: '+done.name);
+    banner($('#pMsg'),'✓ Done! Download below. Delete the temp release once you have the file.','ok');
+    $('#pResult').hidden=false;
+    $('#pResult').innerHTML=`<a class="btn" style="display:inline-block;width:auto;text-decoration:none;text-align:center"
+        href="${done.browser_download_url}" download>Download ${done.name}</a>
+        <button class="btn ghost" id="cleanupRel" style="margin-left:8px">Delete temp release now</button>
+        <p class="muted" style="font-size:11px;margin-top:8px">Flash with <code>fastboot flash init_boot ${done.name}</code> — back up your stock init_boot first.</p>`;
+    $('#cleanupRel').onclick=async()=>{try{await gh(`/repos/${repo()}/releases/${rel.id}`,{method:'DELETE'});
+      try{await gh(`/repos/${repo()}/git/refs/tags/${tag}`,{method:'DELETE'});}catch(e){}
+      $('#pResult').innerHTML='<span class="muted" style="font-size:12px">Temp release deleted. ✓</span>';}
+      catch(e){banner($('#pMsg'),'cleanup: '+e.message,'err');}};
+  }catch(e){
+    banner($('#pMsg'),'✗ '+e.message,'err'); plog('ERROR: '+e.message);
+  }finally{btn.disabled=false;}
+};
+
+// init
+loadKernels(); loadVersions(); if(tok()){loadRuns();}
+</script>
+</body>
+</html>
