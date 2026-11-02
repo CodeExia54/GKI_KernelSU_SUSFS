@@ -1,5 +1,5 @@
 name: Build from profile
-run-name: "Build profile: ${{ inputs.profile }}"
+run-name: "Build profile: ${{ inputs.profile }}${{ inputs.kernelsu_variant_override != '(profile default)' && format(' [variant: {0}]', inputs.kernelsu_variant_override) || '' }}${{ inputs.use_kpm_override != '(profile default)' && format(' [KPM: {0}]', inputs.use_kpm_override) || '' }}"
 
 # Builds exactly ONE kernel target from a named profile file in
 # config/profiles/, instead of the hardcoded 20-sublevel matrix that
@@ -10,13 +10,60 @@ on:
   workflow_dispatch:
     inputs:
       profile:
-        description: "Profile name (a file at config/profiles/<name>.yml)"
+        description: "Profile name (a file at config/profiles/<name>.yml) — supplies every default below"
         required: true
         type: choice
         options:
           - exia-206
           - bakasu-default
         default: exia-206
+
+      # ==================== Per-run overrides (optional) ====================
+      # Leave these on "(profile default)" to use exactly what the profile
+      # file says. Pick anything else to override just that one setting for
+      # this run only — the profile file itself is never modified. Same
+      # options as kernel-a13-5-15.yml's dispatch form; see docs/VARIANTS.md
+      # for what each KernelSU variant actually supports.
+      kernelsu_variant_override:
+        description: "KernelSU variant — see docs/VARIANTS.md. SukiSU=KPM focus+single manager; BakaSU=metamodules+multi-manager, KPM unverified; Official=no KPM"
+        required: false
+        type: choice
+        options:
+          - "(profile default)"
+          - Official
+          - SukiSU
+          - "SukiSU(40726)"
+          - "SukiSU(40548)"
+          - BakaSU
+        default: "(profile default)"
+      use_kpm_override:
+        description: "KPM feature override. Not available for Official; attempted for SukiSU*/BakaSU/Next but fails the build if that variant's source doesn't declare CONFIG_KPM that day"
+        required: false
+        type: choice
+        options:
+          - "(profile default)"
+          - "disabled (关闭)"
+          - "enabled (开启)"
+          - "patched (开启并修补，尚不支持)"
+        default: "(profile default)"
+      use_zram_override:
+        description: "ZRAM LZ4KD algorithm override"
+        required: false
+        type: choice
+        options: ["(profile default)", "true", "false"]
+        default: "(profile default)"
+      use_bbg_override:
+        description: "BBG anti-bootloop patch override"
+        required: false
+        type: choice
+        options: ["(profile default)", "true", "false"]
+        default: "(profile default)"
+      cve_2026_43499_patch_override:
+        description: "GhostLock (CVE-2026-43499/CVE-2026-53163) security fix override — see docs/advanced-features-en.md"
+        required: false
+        type: choice
+        options: ["(profile default)", "true", "false"]
+        default: "(profile default)"
 
 permissions:
   contents: write
@@ -68,21 +115,45 @@ jobs:
             grep -E "^$1=" "$PROFILE_FILE" | head -n1 | cut -d'=' -f2- || true
           }
 
+          # apply a per-run override on top of the profile's value, unless
+          # the override was left on the sentinel "(profile default)".
+          override() {
+            local profile_value="$1" override_value="$2"
+            if [ -n "$override_value" ] && [ "$override_value" != "(profile default)" ]; then
+              printf '%s' "$override_value"
+            else
+              printf '%s' "$profile_value"
+            fi
+          }
+
+          KERNELSU_VARIANT="$(override "$(get kernelsu_variant)" "${{ inputs.kernelsu_variant_override }}")"
+          USE_KPM="$(override "$(get use_kpm)" "${{ inputs.use_kpm_override }}")"
+          USE_ZRAM="$(override "$(get use_zram)" "${{ inputs.use_zram_override }}")"
+          USE_BBG="$(override "$(get use_bbg)" "${{ inputs.use_bbg_override }}")"
+          CVE_PATCH="$(override "$(get cve_2026_43499_patch)" "${{ inputs.cve_2026_43499_patch_override }}")"
+
+          [ "$KERNELSU_VARIANT" != "$(get kernelsu_variant)" ] && echo "Override: kernelsu_variant -> $KERNELSU_VARIANT"
+          [ "$USE_KPM" != "$(get use_kpm)" ] && echo "Override: use_kpm -> $USE_KPM"
+          [ "$USE_ZRAM" != "$(get use_zram)" ] && echo "Override: use_zram -> $USE_ZRAM"
+          [ "$USE_BBG" != "$(get use_bbg)" ] && echo "Override: use_bbg -> $USE_BBG"
+          [ "$CVE_PATCH" != "$(get cve_2026_43499_patch)" ] && echo "Override: cve_2026_43499_patch -> $CVE_PATCH"
+          true
+
           {
             echo "android_version=$(get android_version)"
             echo "kernel_version=$(get kernel_version)"
             echo "sub_level=$(get sub_level)"
             echo "os_patch_level=$(get os_patch_level)"
             echo "source_ref=$(get source_ref)"
-            echo "kernelsu_variant=$(get kernelsu_variant)"
+            echo "kernelsu_variant=$KERNELSU_VARIANT"
             echo "ksu_mode=$(get ksu_mode)"
-            echo "use_kpm=$(get use_kpm)"
-            echo "use_zram=$(get use_zram)"
-            echo "use_bbg=$(get use_bbg)"
+            echo "use_kpm=$USE_KPM"
+            echo "use_zram=$USE_ZRAM"
+            echo "use_bbg=$USE_BBG"
             echo "use_rekernel=$(get use_rekernel)"
             echo "use_nomount=$(get use_nomount)"
             echo "use_networking=$(get use_networking)"
-            echo "cve_2026_43499_patch=$(get cve_2026_43499_patch)"
+            echo "cve_2026_43499_patch=$CVE_PATCH"
             echo "droidspaces=$(get droidspaces)"
             echo "droidspaces_ntsync=$(get droidspaces_ntsync)"
             echo "version=$(get version)"
