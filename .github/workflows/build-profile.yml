@@ -36,6 +36,16 @@ on:
           - "SukiSU(40548)"
           - BakaSU
         default: "(profile default)"
+      ksu_mode_override:
+        description: "KernelSU / SUSFS mode override. 'Off' = both enabled (despite the name — it means no restriction, not 'turn off'); 'SUSFS disabled' = KSU only; 'KSU disabled' = neither (pure GKI, no root)"
+        required: false
+        type: choice
+        options:
+          - "(profile default)"
+          - "Off"
+          - "SUSFS disabled"
+          - "KSU disabled"
+        default: "(profile default)"
       use_kpm_override:
         description: "KPM feature override. Not available for Official; attempted for SukiSU*/BakaSU/Next but fails the build if that variant's source doesn't declare CONFIG_KPM that day"
         required: false
@@ -45,6 +55,15 @@ on:
           - "disabled"
           - "enabled"
           - "patched (not yet supported)"
+        default: "(profile default)"
+      artifact_upload_mode_override:
+        description: "Build artifact upload mode override"
+        required: false
+        type: choice
+        options:
+          - "(profile default)"
+          - "AnyKernel3.zip only"
+          - "Upload all"
         default: "(profile default)"
       use_zram_override:
         description: "ZRAM LZ4KD algorithm override"
@@ -94,6 +113,12 @@ on:
         type: choice
         options: ["(profile default)", "true", "false"]
         default: "(profile default)"
+      supp_op_override:
+        description: "OnePlus 8E processor support override — device-specific, irrelevant unless your target device is a OnePlus 8E"
+        required: false
+        type: choice
+        options: ["(profile default)", "true", "false"]
+        default: "(profile default)"
 
 permissions:
   contents: write
@@ -120,6 +145,7 @@ jobs:
       cve_2026_43499_patch: ${{ steps.read.outputs.cve_2026_43499_patch }}
       droidspaces: ${{ steps.read.outputs.droidspaces }}
       droidspaces_ntsync: ${{ steps.read.outputs.droidspaces_ntsync }}
+      supp_op: ${{ steps.read.outputs.supp_op }}
       version: ${{ steps.read.outputs.version }}
       build_time: ${{ steps.read.outputs.build_time }}
       artifact_upload_mode: ${{ steps.read.outputs.artifact_upload_mode }}
@@ -157,7 +183,9 @@ jobs:
           }
 
           KERNELSU_VARIANT="$(override "$(get kernelsu_variant)" "${{ inputs.kernelsu_variant_override }}")"
+          KSU_MODE_RESOLVED="$(override "$(get ksu_mode)" "${{ inputs.ksu_mode_override }}")"
           USE_KPM="$(override "$(get use_kpm)" "${{ inputs.use_kpm_override }}")"
+          ARTIFACT_UPLOAD_MODE="$(override "$(get artifact_upload_mode)" "${{ inputs.artifact_upload_mode_override }}")"
           USE_ZRAM="$(override "$(get use_zram)" "${{ inputs.use_zram_override }}")"
           USE_BBG="$(override "$(get use_bbg)" "${{ inputs.use_bbg_override }}")"
           CVE_PATCH="$(override "$(get cve_2026_43499_patch)" "${{ inputs.cve_2026_43499_patch_override }}")"
@@ -166,9 +194,12 @@ jobs:
           USE_NETWORKING="$(override "$(get use_networking)" "${{ inputs.use_networking_override }}")"
           DROIDSPACES="$(override "$(get droidspaces)" "${{ inputs.droidspaces_override }}")"
           DROIDSPACES_NTSYNC="$(override "$(get droidspaces_ntsync)" "${{ inputs.droidspaces_ntsync_override }}")"
+          SUPP_OP="$(override "$(get supp_op)" "${{ inputs.supp_op_override }}")"
 
           [ "$KERNELSU_VARIANT" != "$(get kernelsu_variant)" ] && echo "Override: kernelsu_variant -> $KERNELSU_VARIANT"
+          [ "$KSU_MODE_RESOLVED" != "$(get ksu_mode)" ] && echo "Override: ksu_mode -> $KSU_MODE_RESOLVED"
           [ "$USE_KPM" != "$(get use_kpm)" ] && echo "Override: use_kpm -> $USE_KPM"
+          [ "$ARTIFACT_UPLOAD_MODE" != "$(get artifact_upload_mode)" ] && echo "Override: artifact_upload_mode -> $ARTIFACT_UPLOAD_MODE"
           [ "$USE_ZRAM" != "$(get use_zram)" ] && echo "Override: use_zram -> $USE_ZRAM"
           [ "$USE_BBG" != "$(get use_bbg)" ] && echo "Override: use_bbg -> $USE_BBG"
           [ "$CVE_PATCH" != "$(get cve_2026_43499_patch)" ] && echo "Override: cve_2026_43499_patch -> $CVE_PATCH"
@@ -177,6 +208,7 @@ jobs:
           [ "$USE_NETWORKING" != "$(get use_networking)" ] && echo "Override: use_networking -> $USE_NETWORKING"
           [ "$DROIDSPACES" != "$(get droidspaces)" ] && echo "Override: droidspaces -> $DROIDSPACES"
           [ "$DROIDSPACES_NTSYNC" != "$(get droidspaces_ntsync)" ] && echo "Override: droidspaces_ntsync -> $DROIDSPACES_NTSYNC"
+          [ "$SUPP_OP" != "$(get supp_op)" ] && echo "Override: supp_op -> $SUPP_OP"
           true
 
           {
@@ -186,7 +218,7 @@ jobs:
             echo "os_patch_level=$(get os_patch_level)"
             echo "source_ref=$(get source_ref)"
             echo "kernelsu_variant=$KERNELSU_VARIANT"
-            echo "ksu_mode=$(get ksu_mode)"
+            echo "ksu_mode=$KSU_MODE_RESOLVED"
             echo "use_kpm=$USE_KPM"
             echo "use_zram=$USE_ZRAM"
             echo "use_bbg=$USE_BBG"
@@ -196,16 +228,17 @@ jobs:
             echo "cve_2026_43499_patch=$CVE_PATCH"
             echo "droidspaces=$DROIDSPACES"
             echo "droidspaces_ntsync=$DROIDSPACES_NTSYNC"
+            echo "supp_op=$SUPP_OP"
             echo "version=$(get version)"
             echo "build_time=$(get build_time)"
-            echo "artifact_upload_mode=$(get artifact_upload_mode)"
+            echo "artifact_upload_mode=$ARTIFACT_UPLOAD_MODE"
             echo "stock_defconfig=$(get stock_defconfig)"
           } >> "$GITHUB_OUTPUT"
 
           # mirrors the enable_susfs derivation kernel-a13-5-15.yml etc. do
           # from ksu_mode, since this workflow calls build.yml directly.
-          KSU_MODE="$(get ksu_mode)"
-          if [ "$KSU_MODE" == "SUSFS disabled" ] || [ "$KSU_MODE" == "KSU disabled" ]; then
+          # Uses the resolved (post-override) value, not the raw profile one.
+          if [ "$KSU_MODE_RESOLVED" == "SUSFS disabled" ] || [ "$KSU_MODE_RESOLVED" == "KSU disabled" ]; then
             echo "enable_susfs=false" >> "$GITHUB_OUTPUT"
           else
             echo "enable_susfs=true" >> "$GITHUB_OUTPUT"
@@ -292,6 +325,7 @@ jobs:
       cve_2026_43499_patch: ${{ needs.load-profile.outputs.cve_2026_43499_patch == 'true' }}
       droidspaces: ${{ needs.load-profile.outputs.droidspaces }}
       droidspaces_ntsync: ${{ needs.load-profile.outputs.droidspaces_ntsync == 'true' }}
+      supp_op: ${{ needs.load-profile.outputs.supp_op == 'true' }}
       version: ${{ needs.load-profile.outputs.version }}
       build_time: ${{ needs.load-profile.outputs.build_time }}
       artifact_upload_mode: ${{ needs.load-profile.outputs.artifact_upload_mode }}

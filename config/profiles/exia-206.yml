@@ -40,6 +40,7 @@ use_networking=false
 cve_2026_43499_patch=true
 droidspaces=off
 droidspaces_ntsync=false
+supp_op=false
 
 # Full original stock version string; build.yml strips the leading
 # X.Y.Z automatically and keeps the rest as LOCALVERSION.

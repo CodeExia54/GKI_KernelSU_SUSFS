@@ -46,6 +46,7 @@ use_networking=false
 cve_2026_43499_patch=false
 droidspaces=off
 droidspaces_ntsync=false
+supp_op=false
 
 # No specific device to match yet — leave blank for an auto-generated
 # version/build_time, or fill in once a target device is picked.
