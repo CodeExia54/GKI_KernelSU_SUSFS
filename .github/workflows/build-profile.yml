@@ -171,6 +171,46 @@ jobs:
             echo "enable_susfs=true" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Cross-check sub_level against the maintained version data
+        # kernel-custom.yml resolves sub_level by looking up os_patch_level in
+        # data/<android_version>/<kernel_version>.json (kept current by the
+        # scheduled "chore: update GKI kernel version data" commits) instead
+        # of a hand-maintained value in the profile file. Profiles still
+        # declare sub_level explicitly (needed for source_ref precision --
+        # see docs/BUILD_PROFILES.md), but this warns loudly if that drifts
+        # from what the maintained data now says, instead of silently
+        # building a stale sublevel.
+        run: |
+          python3 <<'PY'
+          import json
+          from pathlib import Path
+
+          android_version = "${{ steps.read.outputs.android_version }}"
+          kernel_version = "${{ steps.read.outputs.kernel_version }}"
+          os_patch_level = "${{ steps.read.outputs.os_patch_level }}"
+          declared_sub_level = "${{ steps.read.outputs.sub_level }}"
+
+          data_path = Path("data") / android_version / f"{kernel_version}.json"
+          if not data_path.exists():
+              print(f"::warning::No version data at {data_path}, skipping cross-check")
+              raise SystemExit(0)
+
+          data = json.loads(data_path.read_text())
+          if os_patch_level == "lts":
+              expected = data.get("lts")
+              expected_sub = expected.rsplit(".", 1)[-1] if expected else None
+          else:
+              matched = next((e for e in data.get("entries", []) if e.get("date") == os_patch_level), None)
+              expected_sub = matched.get("kernel", "").rsplit(".", 1)[-1] if matched else None
+
+          if expected_sub is None:
+              print(f"::warning::No maintained data entry for {android_version}/{kernel_version} os_patch_level={os_patch_level}, can't cross-check sub_level={declared_sub_level}")
+          elif expected_sub != declared_sub_level:
+              print(f"::warning::Profile declares sub_level={declared_sub_level} but maintained data now says {expected_sub} for os_patch_level={os_patch_level} -- the profile may be stale, double check before relying on this build")
+          else:
+              print(f"Cross-check OK: sub_level={declared_sub_level} matches maintained data for os_patch_level={os_patch_level}")
+          PY
+
       - name: Install this profile's stock_defconfig
         if: steps.read.outputs.stock_defconfig != ''
         run: |

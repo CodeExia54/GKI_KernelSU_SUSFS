@@ -43,3 +43,18 @@ exposes it).
 - See [BUILD_PROFILES.md](BUILD_PROFILES.md) for the manager/kernel UAPI-version gate and the disguised/spoofed
   manager fix — both documented against `SukiSU`; re-verify against `BakaSU`'s own manager source
   (`kernel/manager/` in `Baka-SU/BakaSU`) before assuming identical behavior, since it's a separate codebase.
+
+## "Manager shows preview mode / root options missing" — two different causes, don't conflate them
+
+Both are fully written up in [BUILD_PROFILES.md](BUILD_PROFILES.md), linked here because this is where people
+compare variants and land first:
+
+1. **[Manager/kernel UAPI version mismatch](BUILD_PROFILES.md#manager-kernel-compatibility--the-thing-that-actually-matters)**
+   — the manager requires `kernelUAPIVersion == managerUAPIVersion` exactly. Happens with old pinned kernel
+   builds (e.g. `SukiSU(40726)`/`SukiSU(40548)`) against a current manager APK.
+2. **[Disguised/spoofed manager package-name issue](BUILD_PROFILES.md#disguised-spoofed-manager-apps-random-package-name-not-getting-recognized-at-all)**
+   — a *correctly matching* kernel still won't recognize a randomly-renamed manager app by default, because
+   the kernel's manager-scan only checks apps named exactly `com.sukisu.ultra` unless the `dynamic_manager`
+   extension is explicitly enabled on-device, and even then it locks onto the first validly-signed APK it
+   finds — stale duplicate spoofed installs from past sessions can silently keep winning. Confirmed fixed
+   2026-11-01; full on-device procedure in the linked section.
