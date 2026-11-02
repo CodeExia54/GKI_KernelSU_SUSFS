@@ -64,6 +64,36 @@ on:
         type: choice
         options: ["(profile default)", "true", "false"]
         default: "(profile default)"
+      use_rekernel_override:
+        description: "Re-Kernel driver override — binder/signal/network IPC monitor for anti-background-kill apps, NOT a panic/crash log tool"
+        required: false
+        type: choice
+        options: ["(profile default)", "true", "false"]
+        default: "(profile default)"
+      use_nomount_override:
+        description: "NoMount mount meta-module override"
+        required: false
+        type: choice
+        options: ["(profile default)", "true", "false"]
+        default: "(profile default)"
+      use_networking_override:
+        description: "Network enhancements override (BBRv3 TCP congestion control, IPSet, Qdisc/CAKE traffic shaping, in-kernel WireGuard, CIFS)"
+        required: false
+        type: choice
+        options: ["(profile default)", "true", "false"]
+        default: "(profile default)"
+      droidspaces_override:
+        description: "Droidspaces Linux container support override (experimental, back up boot image first)"
+        required: false
+        type: choice
+        options: ["(profile default)", "off", "678", "123", "345"]
+        default: "(profile default)"
+      droidspaces_ntsync_override:
+        description: "Droidspaces NTSync override (Windows/Wine sync-primitive emulation, only matters if Droidspaces is also on)"
+        required: false
+        type: choice
+        options: ["(profile default)", "true", "false"]
+        default: "(profile default)"
 
 permissions:
   contents: write
@@ -131,12 +161,22 @@ jobs:
           USE_ZRAM="$(override "$(get use_zram)" "${{ inputs.use_zram_override }}")"
           USE_BBG="$(override "$(get use_bbg)" "${{ inputs.use_bbg_override }}")"
           CVE_PATCH="$(override "$(get cve_2026_43499_patch)" "${{ inputs.cve_2026_43499_patch_override }}")"
+          USE_REKERNEL="$(override "$(get use_rekernel)" "${{ inputs.use_rekernel_override }}")"
+          USE_NOMOUNT="$(override "$(get use_nomount)" "${{ inputs.use_nomount_override }}")"
+          USE_NETWORKING="$(override "$(get use_networking)" "${{ inputs.use_networking_override }}")"
+          DROIDSPACES="$(override "$(get droidspaces)" "${{ inputs.droidspaces_override }}")"
+          DROIDSPACES_NTSYNC="$(override "$(get droidspaces_ntsync)" "${{ inputs.droidspaces_ntsync_override }}")"
 
           [ "$KERNELSU_VARIANT" != "$(get kernelsu_variant)" ] && echo "Override: kernelsu_variant -> $KERNELSU_VARIANT"
           [ "$USE_KPM" != "$(get use_kpm)" ] && echo "Override: use_kpm -> $USE_KPM"
           [ "$USE_ZRAM" != "$(get use_zram)" ] && echo "Override: use_zram -> $USE_ZRAM"
           [ "$USE_BBG" != "$(get use_bbg)" ] && echo "Override: use_bbg -> $USE_BBG"
           [ "$CVE_PATCH" != "$(get cve_2026_43499_patch)" ] && echo "Override: cve_2026_43499_patch -> $CVE_PATCH"
+          [ "$USE_REKERNEL" != "$(get use_rekernel)" ] && echo "Override: use_rekernel -> $USE_REKERNEL"
+          [ "$USE_NOMOUNT" != "$(get use_nomount)" ] && echo "Override: use_nomount -> $USE_NOMOUNT"
+          [ "$USE_NETWORKING" != "$(get use_networking)" ] && echo "Override: use_networking -> $USE_NETWORKING"
+          [ "$DROIDSPACES" != "$(get droidspaces)" ] && echo "Override: droidspaces -> $DROIDSPACES"
+          [ "$DROIDSPACES_NTSYNC" != "$(get droidspaces_ntsync)" ] && echo "Override: droidspaces_ntsync -> $DROIDSPACES_NTSYNC"
           true
 
           {
@@ -150,12 +190,12 @@ jobs:
             echo "use_kpm=$USE_KPM"
             echo "use_zram=$USE_ZRAM"
             echo "use_bbg=$USE_BBG"
-            echo "use_rekernel=$(get use_rekernel)"
-            echo "use_nomount=$(get use_nomount)"
-            echo "use_networking=$(get use_networking)"
+            echo "use_rekernel=$USE_REKERNEL"
+            echo "use_nomount=$USE_NOMOUNT"
+            echo "use_networking=$USE_NETWORKING"
             echo "cve_2026_43499_patch=$CVE_PATCH"
-            echo "droidspaces=$(get droidspaces)"
-            echo "droidspaces_ntsync=$(get droidspaces_ntsync)"
+            echo "droidspaces=$DROIDSPACES"
+            echo "droidspaces_ntsync=$DROIDSPACES_NTSYNC"
             echo "version=$(get version)"
             echo "build_time=$(get build_time)"
             echo "artifact_upload_mode=$(get artifact_upload_mode)"
