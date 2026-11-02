@@ -42,9 +42,9 @@ on:
         type: choice
         options:
           - "(profile default)"
-          - "disabled (关闭)"
-          - "enabled (开启)"
-          - "patched (开启并修补，尚不支持)"
+          - "disabled"
+          - "enabled"
+          - "patched (not yet supported)"
         default: "(profile default)"
       use_zram_override:
         description: "ZRAM LZ4KD algorithm override"
@@ -165,7 +165,7 @@ jobs:
           # mirrors the enable_susfs derivation kernel-a13-5-15.yml etc. do
           # from ksu_mode, since this workflow calls build.yml directly.
           KSU_MODE="$(get ksu_mode)"
-          if [ "$KSU_MODE" == "禁用SUSFS" ] || [ "$KSU_MODE" == "禁用KSU" ]; then
+          if [ "$KSU_MODE" == "SUSFS disabled" ] || [ "$KSU_MODE" == "KSU disabled" ]; then
             echo "enable_susfs=false" >> "$GITHUB_OUTPUT"
           else
             echo "enable_susfs=true" >> "$GITHUB_OUTPUT"

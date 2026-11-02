@@ -26,19 +26,19 @@ on:
         required: true
         type: choice
         options:
-          - 关闭
-          - 禁用SUSFS
-          - 禁用KSU
-        default: 关闭
+          - Off
+          - SUSFS disabled
+          - KSU disabled
+        default: Off
       use_kpm:
         description: "KPM feature (patched not yet supported). Not available for Official; attempted for SukiSU*/BakaSU/Next but the build fails loudly if that variant's source doesn't declare CONFIG_KPM that day"
         required: true
         type: choice
-        default: "disabled (关闭)"
+        default: "disabled"
         options:
-          - "disabled (关闭)"
-          - "enabled (开启)"
-          - "patched (开启并修补，尚不支持)"
+          - "disabled"
+          - "enabled"
+          - "patched (not yet supported)"
       droidspaces:
         description: "Droidspaces container support"
         required: false
@@ -54,9 +54,9 @@ on:
         required: true
         type: choice
         options:
-          - "仅上传 AnyKernel3.zip"
-          - "上传全部"
-        default: "仅上传 AnyKernel3.zip"
+          - "AnyKernel3.zip only"
+          - "Upload all"
+        default: "AnyKernel3.zip only"
 
       # ==================== Text inputs ====================
       version:
@@ -145,7 +145,7 @@ on:
       ksu_mode:
         required: false
         type: string
-        default: 关闭
+        default: Off
       droidspaces:
         required: false
         type: string
@@ -153,7 +153,7 @@ on:
       artifact_upload_mode:
         required: false
         type: string
-        default: "上传全部"
+        default: "Upload all"
       droidspaces_ntsync:
         required: false
         type: boolean
@@ -262,8 +262,8 @@ jobs:
       cve_2026_43499_patch: ${{ inputs.cve_2026_43499_patch }}
       export_susfs_patches: ${{ inputs.export_susfs_patches || false }}
       supp_op: false
-      enable_susfs: ${{ inputs.ksu_mode != '禁用SUSFS' && inputs.ksu_mode != '禁用KSU' }}
-      ksu_mode: ${{ inputs.ksu_mode || '关闭' }}
+      enable_susfs: ${{ inputs.ksu_mode != 'SUSFS disabled' && inputs.ksu_mode != 'KSU disabled' }}
+      ksu_mode: ${{ inputs.ksu_mode || 'Off' }}
       droidspaces: ${{ inputs.droidspaces || 'off' }}
       droidspaces_ntsync: ${{ inputs.droidspaces_ntsync || false }}
       artifact_upload_mode: ${{ inputs.artifact_upload_mode }}

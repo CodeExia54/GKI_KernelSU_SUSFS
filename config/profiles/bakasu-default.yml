@@ -35,8 +35,8 @@ sub_level=206
 os_patch_level=2026-06
 
 kernelsu_variant=BakaSU
-ksu_mode=关闭
-use_kpm=enabled (开启)
+ksu_mode=Off
+use_kpm=enabled
 
 use_zram=false
 use_bbg=false
@@ -52,6 +52,6 @@ droidspaces_ntsync=false
 version=
 build_time=
 
-artifact_upload_mode=上传全部
+artifact_upload_mode=Upload all
 # No stock_defconfig captured for a BakaSU target device yet.
 stock_defconfig=

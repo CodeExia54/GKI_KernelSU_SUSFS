@@ -28,7 +28,7 @@ on:
       ksu_mode:
         required: false
         type: string
-        default: 关闭
+        default: Off
 
       # ==================== Optional config ====================
       version:
@@ -60,7 +60,7 @@ on:
       use_kpm:
         required: true
         type: string
-        default: "disabled (关闭)"
+        default: "disabled"
       use_rekernel:
         required: false
         type: boolean
@@ -96,7 +96,7 @@ on:
       artifact_upload_mode:
         required: false
         type: string
-        default: "上传全部"
+        default: "Upload all"
       droidspaces_ntsync:
         required: false
         type: boolean
@@ -558,7 +558,7 @@ jobs:
 
       - name: Determine KernelSU branch
         id: ksu-branch
-        if: inputs.ksu_mode != '禁用KSU'
+        if: inputs.ksu_mode != 'KSU disabled'
         run: |
           variant_input="${{ inputs.ksu_variant }}"
 
@@ -637,7 +637,7 @@ jobs:
           echo "KSU branch: $BRANCH"
 
       - name: Add KernelSU
-        if: inputs.ksu_mode != '禁用KSU'
+        if: inputs.ksu_mode != 'KSU disabled'
         working-directory: ${{ env.KERNEL_ROOT }}
         run: |
           case "${{ inputs.ksu_variant }}" in
@@ -685,7 +685,7 @@ jobs:
           fi
 
       - name: Configure SukiSU manager info
-        if: (inputs.ksu_variant == 'SukiSU' || inputs.ksu_variant == 'SukiSU(40726)' || inputs.ksu_variant == 'SukiSU(40548)') && inputs.ksu_mode != '禁用KSU'
+        if: (inputs.ksu_variant == 'SukiSU' || inputs.ksu_variant == 'SukiSU(40726)' || inputs.ksu_variant == 'SukiSU(40548)') && inputs.ksu_mode != 'KSU disabled'
         working-directory: ${{ env.KERNEL_ROOT }}/KernelSU
         run: |
           KBUILD_FILE="./kernel/Kbuild"
@@ -822,7 +822,7 @@ jobs:
       # 仅 SukiSU / BakaSU 且启用 SUSFS 时导出，快照用临时索引生成树对象，
       # 不创建提交，避免改变「配置内核名称」读取的 HEAD 哈希
       - name: 记录 SUSFS 基线快照
-        if: inputs.export_susfs_patches && inputs.enable_susfs && inputs.ksu_mode != '禁用KSU' && (inputs.ksu_variant == 'SukiSU' || inputs.ksu_variant == 'BakaSU')
+        if: inputs.export_susfs_patches && inputs.enable_susfs && inputs.ksu_mode != 'KSU disabled' && (inputs.ksu_variant == 'SukiSU' || inputs.ksu_variant == 'BakaSU')
         working-directory: ${{ env.KERNEL_ROOT }}/common
         run: |
           # exclude .rej/.orig and the patch files themselves: apply.sh copies the SUSFS patch into common/ and leaves .rej
@@ -1434,11 +1434,11 @@ jobs:
           EOF
 
           # when KSU is disabled there is no KernelSU in the source, CONFIG_KSU does not exist, and writing it would be rejected by bazel's defconfig check
-          if [ "${{ inputs.ksu_mode }}" != "禁用KSU" ]; then
+          if [ "${{ inputs.ksu_mode }}" != "KSU disabled" ]; then
             echo "CONFIG_KSU=y" >> "$DEFCONFIG"
           fi
 
-          if [ "${{ inputs.ksu_mode }}" != "禁用KSU" ] && { [ "${{ inputs.ksu_variant }}" == "SukiSU" ] || [ "${{ inputs.ksu_variant }}" == "SukiSU(40726)" ] || [ "${{ inputs.ksu_variant }}" == "SukiSU(40548)" ] || [ "${{ inputs.ksu_variant }}" == "BakaSU" ] || [ "${{ inputs.ksu_variant }}" == "Next" ]; }; then
+          if [ "${{ inputs.ksu_mode }}" != "KSU disabled" ] && { [ "${{ inputs.ksu_variant }}" == "SukiSU" ] || [ "${{ inputs.ksu_variant }}" == "SukiSU(40726)" ] || [ "${{ inputs.ksu_variant }}" == "SukiSU(40548)" ] || [ "${{ inputs.ksu_variant }}" == "BakaSU" ] || [ "${{ inputs.ksu_variant }}" == "Next" ]; }; then
             if [[ "${{ inputs.use_kpm }}" == enabled* ]] || [[ "${{ inputs.use_kpm }}" == patched* ]]; then
               if ! grep -RqsE '^[[:space:]]*config[[:space:]]+KPM([[:space:]]|$)' common KernelSU 2>/dev/null; then
                 echo "Error: KPM requested, but the current KernelSU code does not declare CONFIG_KPM" >&2
@@ -1725,7 +1725,7 @@ jobs:
           gzip -n -k -f -9 ./Image > ./Image.gz
 
       - name: Create AnyKernel3 zip
-        if: inputs.artifact_upload_mode == '上传全部'
+        if: inputs.artifact_upload_mode == 'Upload all'
         run: |
           cd "$ANYKERNEL3"
           ZIP_NAME="${{ inputs.android_version }}-${{ inputs.kernel_version }}.${{ inputs.sub_level }}-${{ inputs.os_patch_level }}-AnyKernel3.zip"
@@ -1733,7 +1733,7 @@ jobs:
           zip -r "../$ZIP_NAME" ./*
 
       - name: Prepare AnyKernel3 directory
-        if: inputs.artifact_upload_mode != '上传全部'
+        if: inputs.artifact_upload_mode != 'Upload all'
         run: |
           mv ./Image "$ANYKERNEL3/Image"
 
@@ -1835,7 +1835,7 @@ jobs:
           compression-level: 9
 
       - name: Upload AnyKernel3 flashable zip
-        if: inputs.artifact_upload_mode != '上传全部'
+        if: inputs.artifact_upload_mode != 'Upload all'
         uses: actions/upload-artifact@v6
         with:
           name: ${{ inputs.ksu_variant }}_kernel-${{ env.CONFIG }}-AnyKernel3
@@ -1843,7 +1843,7 @@ jobs:
           compression-level: 9
 
       - name: Upload all build artifacts
-        if: inputs.artifact_upload_mode == '上传全部'
+        if: inputs.artifact_upload_mode == 'Upload all'
         uses: actions/upload-artifact@v6
         with:
           name: ${{ inputs.ksu_variant }}_kernel-${{ env.CONFIG }}

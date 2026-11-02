@@ -43,18 +43,18 @@ on:
         description: "KernelSU / SUSFS mode"
         type: choice
         options:
-          - 关闭
-          - 禁用SUSFS
-          - 禁用KSU
-        default: 关闭
+          - Off
+          - SUSFS disabled
+          - KSU disabled
+        default: Off
       use_kpm:
         description: "KPM feature (patched not yet supported)"
         type: choice
-        default: "disabled (关闭)"
+        default: "disabled"
         options:
-          - "disabled (关闭)"
-          - "enabled (开启)"
-          - "patched (开启并修补，尚不支持)"
+          - "disabled"
+          - "enabled"
+          - "patched (not yet supported)"
       droidspaces:
         description: "Droidspaces container support (5.10~6.6: slot patch, 6.12: on/off)"
         type: choice
@@ -163,7 +163,7 @@ jobs:
       export_susfs_patches: ${{ inputs.export_susfs_patches }}
       ksu_mode: ${{ inputs.ksu_mode }}
       droidspaces: ${{ inputs.droidspaces }}
-      artifact_upload_mode: "上传全部"
+      artifact_upload_mode: "Upload all"
       droidspaces_ntsync: ${{ inputs.droidspaces_ntsync }}
       called_from_main: true
 
@@ -185,7 +185,7 @@ jobs:
       export_susfs_patches: ${{ inputs.export_susfs_patches }}
       ksu_mode: ${{ inputs.ksu_mode }}
       droidspaces: ${{ inputs.droidspaces }}
-      artifact_upload_mode: "上传全部"
+      artifact_upload_mode: "Upload all"
       droidspaces_ntsync: ${{ inputs.droidspaces_ntsync }}
       called_from_main: true
 
@@ -207,7 +207,7 @@ jobs:
       export_susfs_patches: ${{ inputs.export_susfs_patches }}
       ksu_mode: ${{ inputs.ksu_mode }}
       droidspaces: ${{ inputs.droidspaces }}
-      artifact_upload_mode: "上传全部"
+      artifact_upload_mode: "Upload all"
       droidspaces_ntsync: ${{ inputs.droidspaces_ntsync }}
       called_from_main: true
 
@@ -229,7 +229,7 @@ jobs:
       export_susfs_patches: ${{ inputs.export_susfs_patches }}
       ksu_mode: ${{ inputs.ksu_mode }}
       droidspaces: ${{ inputs.droidspaces }}
-      artifact_upload_mode: "上传全部"
+      artifact_upload_mode: "Upload all"
       droidspaces_ntsync: ${{ inputs.droidspaces_ntsync }}
       called_from_main: true
 
@@ -251,7 +251,7 @@ jobs:
       export_susfs_patches: ${{ inputs.export_susfs_patches }}
       ksu_mode: ${{ inputs.ksu_mode }}
       droidspaces: ${{ inputs.droidspaces }}
-      artifact_upload_mode: "上传全部"
+      artifact_upload_mode: "Upload all"
       droidspaces_ntsync: ${{ inputs.droidspaces_ntsync }}
       called_from_main: true
 
@@ -374,7 +374,7 @@ jobs:
   # Aggregate the SUSFS integration patches exported by each build job into one zip for the Release
   # Artifacts only exist for SukiSU / BakaSU with SUSFS enabled
   collect-susfs-patches:
-    if: ${{ !cancelled() && inputs.export_susfs_patches && inputs.ksu_mode == '关闭' && (inputs.kernelsu_variant == 'SukiSU' || inputs.kernelsu_variant == 'BakaSU') }}
+    if: ${{ !cancelled() && inputs.export_susfs_patches && inputs.ksu_mode == 'Off' && (inputs.kernelsu_variant == 'SukiSU' || inputs.kernelsu_variant == 'BakaSU') }}
     runs-on: ubuntu-24.04
     needs:
       - build-a12-5-10
@@ -602,7 +602,7 @@ jobs:
 
           # Release title and KernelSU / SUSFS mode (a later same-named var written to GITHUB_ENV overrides the earlier value)
           case "${{ inputs.ksu_mode }}" in
-            "禁用KSU")
+            "KSU disabled")
               echo "KSU_NAME=not integrated" >> $GITHUB_ENV
               echo "KSU_VER=" >> $GITHUB_ENV
               echo "SUS_VER=not integrated" >> $GITHUB_ENV
@@ -613,7 +613,7 @@ jobs:
               echo "RELEASE_HEADLINE=**Pure GKI kernel** (no KernelSU / SUSFS integrated)" >> $GITHUB_ENV
               echo "RELEASE_NAME=GKI Kernel: pure (no KernelSU / SUSFS)" >> $GITHUB_ENV
               ;;
-            "禁用SUSFS")
+            "SUSFS disabled")
               echo "SUS_VER=not integrated" >> $GITHUB_ENV
               echo "RELEASE_HEADLINE=**${KSU_NAME} ${KSU_VER}** (no SUSFS integrated)" >> $GITHUB_ENV
               echo "RELEASE_NAME=GKI Kernel: ${KSU_NAME} ${KSU_VER} (no SUSFS)" >> $GITHUB_ENV
@@ -647,12 +647,12 @@ jobs:
           ref: ${{ github.sha }}
 
       - name: Determine KSU ref
-        if: inputs.ksu_mode != '禁用KSU'
+        if: inputs.ksu_mode != 'KSU disabled'
         run: |
           case "${{ inputs.kernelsu_variant }}" in
             "Official") BRANCH="main" ;;
             "SukiSU")
-              if [ "${{ inputs.ksu_mode }}" != "关闭" ]; then
+              if [ "${{ inputs.ksu_mode }}" != "Off" ]; then
                 BRANCH="main"
               else
                 BRANCH="builtin"
@@ -666,7 +666,7 @@ jobs:
           echo "BRANCH_INFO=$BRANCH" >> $GITHUB_ENV
 
       - name: Get KernelSU commit info
-        if: inputs.ksu_mode != '禁用KSU'
+        if: inputs.ksu_mode != 'KSU disabled'
         run: |
           case "${{ inputs.kernelsu_variant }}" in
             "Official") REPO_URL="https://github.com/tiann/KernelSU.git"; REPO_URL2="tiann/KernelSU" ;;
@@ -695,7 +695,7 @@ jobs:
           echo "KSU_URL=$KSU_URL" >> $GITHUB_ENV
 
       - name: Get SUSFS commit info
-        if: inputs.ksu_mode == '关闭'
+        if: inputs.ksu_mode == 'Off'
         run: |
           GITLAB_OWNER="simonpunk"
           GITLAB_REPO="susfs4ksu"
@@ -724,7 +724,7 @@ jobs:
           else
             KSU_DISPLAY_REF="$KSU_REF"
           fi
-          if [[ "${{ inputs.ksu_mode }}" == "禁用KSU" ]]; then
+          if [[ "${{ inputs.ksu_mode }}" == "KSU disabled" ]]; then
             KSU_COMMIT_LINE="- This build did not integrate KernelSU"
           else
             KSU_COMMIT_LINE="- $KSU_NAME: [\`$KSU_DISPLAY_REF\`]($KSU_URL)"
@@ -762,7 +762,7 @@ jobs:
           append_susfs_commit "${{ inputs.build_a14_6_1 || inputs.build_all }}" "Android 14 / 6.1" "${COMMIT_HASH_gki_android14_6_1}" "${COMMIT_URL_gki_android14_6_1}"
           append_susfs_commit "${{ inputs.build_a15_6_6 || inputs.build_all }}" "Android 15 / 6.6" "${COMMIT_HASH_gki_android15_6_6}" "${COMMIT_URL_gki_android15_6_6}"
           append_susfs_commit "${{ inputs.build_a16_6_12 || inputs.build_all }}" "Android 16 / 6.12" "${COMMIT_HASH_gki_android16_6_12}" "${COMMIT_URL_gki_android16_6_12}"
-          if [[ "${{ inputs.ksu_mode }}" != "关闭" ]]; then
+          if [[ "${{ inputs.ksu_mode }}" != "Off" ]]; then
             echo "- This build did not integrate SUSFS" > susfs_commits.md
           elif [[ ! -s susfs_commits.md ]]; then
             echo "- No SUSFS commit info obtained for this build" > susfs_commits.md

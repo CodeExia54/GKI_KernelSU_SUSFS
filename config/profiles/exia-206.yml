@@ -29,8 +29,8 @@ os_patch_level=2026-06
 source_ref=android13-5.15-2026-06_r3
 
 kernelsu_variant=SukiSU
-ksu_mode=关闭
-use_kpm=enabled (开启)
+ksu_mode=Off
+use_kpm=enabled
 
 use_zram=true
 use_bbg=true
@@ -48,5 +48,5 @@ version=5.15.206-android13-8-00056-g3f87b8704e9e-ab15683575
 # "Day Mon DD HH:MM:SS UTC YYYY" regex).
 build_time=Wed Jun 17 04:35:03 UTC 2026
 
-artifact_upload_mode=上传全部
+artifact_upload_mode=Upload all
 stock_defconfig=config/stock/android13-5.15-2026-06.config
