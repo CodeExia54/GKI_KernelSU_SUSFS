@@ -13,19 +13,33 @@
 # ================================================================
 
 # 是否启用自定义提交 (true/false)
-custom=false
+custom=true
 
 # ==================== SUSFS 各分支的 commit hash ====================
 # 仅当 custom=true 时生效
+# android13-5.15 pinned 2026-11-02: ShirkNeko/susfs4ksu started an
+# in-progress priority_uid_filter refactor on 2026-11-01 (5 commits same
+# day, including a mid-refactor "Refactor uid parser" one) that left
+# fs/susfs.c and drivers/kernelsu/{manager/pkg_observer.c,supercall/dispatch.c}
+# referencing susfs_parse_priority_app_strings/susfs_set_priority_uid_filter
+# without declarations, and orphaned susfs_switch_to_ksu_domain/
+# susfs_restore_creds as unused-function -Werror failures. Pinned to the
+# commit right before that refactor started. Re-check if this is still
+# needed next time a build is attempted — the refactor may have since
+# stabilized upstream.
 gki-android12-5.10=
-gki-android13-5.15=
+gki-android13-5.15=1046449aef569550bd0d6f824f548377aae573a4
 gki-android14-6.1=
 gki-android15-6.6=
 gki-android16-6.12=
 
 # ==================== SukiSU 的 commit hash ====================
 # 仅当 custom=true 且使用 SukiSU 变体时生效
-sukisu=b20dee702035af09cb2ecb5f35443bbc1747f3e6
+# Deliberately left blank -- SukiSU itself stays unpinned/latest so it keeps
+# matching the installed manager's UAPI version. See docs/BUILD_PROFILES.md
+# "Manager/kernel compatibility" section. Only the SUSFS commit above is
+# pinned, not SukiSU.
+sukisu=
 
 # ==================== ReSukiSU 的 commit hash ====================
 # 仅当 custom=true 且使用 ReSukiSU 变体时生效
