@@ -1,4 +1,5 @@
 name: Android kernel build - custom
+run-name: "custom ${{ inputs.kernelsu_variant }} KPM=${{ inputs.use_kpm }}"
 
 permissions:
   contents: write
@@ -20,7 +21,7 @@ on:
           - "6.12"
         default: "5.10"
       kernelsu_variant:
-        description: "KernelSU variant"
+        description: "KernelSU variant — see docs/VARIANTS.md for full feature comparison. SukiSU=KPM focus+single manager; BakaSU=metamodules+multi-manager, KPM unverified; Official=no KPM"
         required: true
         type: choice
         options:
@@ -41,7 +42,7 @@ on:
           - 禁用KSU
         default: 关闭
       use_kpm:
-        description: "KPM feature (patched not yet supported)"
+        description: "KPM feature (patched not yet supported). Not available for Official; attempted for SukiSU*/BakaSU/Next but the build fails loudly if that variant's source doesn't declare CONFIG_KPM that day"
         required: true
         type: choice
         default: "disabled (关闭)"

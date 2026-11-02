@@ -1,4 +1,5 @@
 name: Build from profile
+run-name: "Build profile: ${{ inputs.profile }}"
 
 # Builds exactly ONE kernel target from a named profile file in
 # config/profiles/, instead of the hardcoded 20-sublevel matrix that
